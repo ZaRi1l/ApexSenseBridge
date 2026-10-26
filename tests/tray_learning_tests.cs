@@ -775,10 +775,79 @@ internal static class TrayLearningTests
         Assert(restored.BuildApex6PcmArguments("zenless-zone-zero").Contains("--apex6-pcm-companding-gain-percent 175"),
             "Global companding gain was not forwarded.");
 
+        TestApex6PcmManualReferenceAndPolicy();
+
         // Legacy JSON migration without PCM fields
         var legacy = serializer.Deserialize<TraySettings>("{\"AutoDetectGames\":true}");
         Assert(legacy != null && legacy.GetApex6PcmGlobal().Mode == "original",
             "Legacy settings without PCM fields failed to migrate.");
+    }
+
+    private static void TestApex6PcmManualReferenceAndPolicy()
+    {
+        int peak;
+        foreach (int value in new[] { 0, 1, 100, 32768 })
+        {
+            Assert(Apex6PcmGameSettings.TryParseManualReference(value.ToString(CultureInfo.InvariantCulture), "abs16", out peak) && peak == value,
+                "Explicit abs16 input changed an exact boundary value.");
+        }
+        foreach (string value in new[] { "0", "1", "100" })
+        {
+            Assert(Apex6PcmGameSettings.TryParseManualReference(value, "%", out peak) &&
+                peak == (int)Math.Round(double.Parse(value, CultureInfo.InvariantCulture) * 327.67),
+                "Explicit percent input did not convert its selected unit.");
+        }
+        foreach (string unit in new[] { "%", "abs16" })
+        {
+            foreach (string value in new[] { "-1", "NaN", "Infinity", "-Infinity", "1e999", "99999999999999999999", "" })
+                Assert(!Apex6PcmGameSettings.TryParseManualReference(value, unit, out peak), "Invalid manual reference was accepted.");
+        }
+        Assert(!Apex6PcmGameSettings.TryParseManualReference("32768", "%", out peak) &&
+            !Apex6PcmGameSettings.TryParseManualReference("32769", "abs16", out peak) &&
+            !Apex6PcmGameSettings.TryParseManualReference("1.5", "abs16", out peak) &&
+            !Apex6PcmGameSettings.TryParseManualReference("1", "auto", out peak), "Manual units or range were inferred.");
+
+        var settings = new TraySettings();
+        var global = settings.GetApex6PcmGlobal();
+        global.Mode = "normalize";
+        global.TargetPeakPercent = 75;
+        global.MaxGainPercent = 150;
+        global.LinearGainPercent = 123;
+        global.CompandingGainPercent = 175;
+        var game = new Apex6PcmGameSettings { Mode = "linear", TargetPeakPercent = 99, LinearGainPercent = 399, MeasuredReferencePeakAbs16 = 100 };
+        settings.SetApex6PcmGameSettings("manual", game);
+        var policy = settings.ResolveApex6PcmPolicy("manual");
+        Assert(policy.Mode == "normalize" && policy.TargetPeakPercent == 75 && policy.MaxGainPercent == 150 &&
+            policy.LinearGainPercent == 123 && policy.CompandingGainPercent == 175 && policy.MeasuredReferencePeakAbs16 == 100,
+            "Inherited display policy used dormant game overrides or lost its reference.");
+        Assert(policy.GetEffectiveGainRatio() == 1.5, "Effective normalize gain ignored the configured cap.");
+        foreach (int value in new[] { 0, 1, 100, 32768 })
+        {
+            Assert(game.TrySetManualReference(value.ToString(CultureInfo.InvariantCulture), "abs16"), "Valid manual reference was not applied.");
+            Assert(game.UseGlobal && game.MeasuredReferencePeakAbs16 == value, "Manual reference changed inheritance or exact amplitude.");
+            var serializer = new System.Web.Script.Serialization.JavaScriptSerializer();
+            var restored = serializer.Deserialize<TraySettings>(serializer.Serialize(settings));
+            Assert(restored.GetApex6PcmGameSettings("manual").MeasuredReferencePeakAbs16 == value && restored.GetApex6PcmGameSettings("manual").UseGlobal,
+                "Manual amplitude/inheritance changed in serialization.");
+        }
+        Assert(!game.TrySetManualReference("NaN", "%") && game.MeasuredReferencePeakAbs16 == 32768,
+            "Invalid manual input changed the saved reference.");
+        Assert(game.TrySetManualReference("1", "%") && game.MeasuredReferencePeakAbs16 == 328,
+            "One percent was interpreted as an abs16 amplitude.");
+        var percentSerializer = new System.Web.Script.Serialization.JavaScriptSerializer();
+        var percentRestored = percentSerializer.Deserialize<TraySettings>(percentSerializer.Serialize(settings));
+        Assert(percentRestored.ResolveApex6PcmPolicy("manual").MeasuredReferencePeakAbs16 == 328 &&
+            percentRestored.BuildApex6PcmArguments("manual").Contains("--apex6-pcm-reference-peak-abs16 328"),
+            "Explicit percent input did not survive serialization and reach the actual launch policy.");
+        game.UseGlobal = false;
+        policy = settings.ResolveApex6PcmPolicy("manual");
+        Assert(policy.Mode == "linear" && policy.GetEffectiveGainRatio() == 3.99, "Override policy did not resolve locally.");
+        game.UseGlobal = true;
+        global.Mode = "companding";
+        policy = settings.ResolveApex6PcmPolicy("manual");
+        Assert(policy.GetEffectiveGainRatio() == 1.75, "Companding display ignored configured curve gain.");
+        settings.SetApex6PcmGameSettings("manual", null);
+        Assert(settings.ResolveApex6PcmPolicy("manual").UseGlobal, "Reset did not return to inheritance.");
     }
 
     private static void TestGameExecutableSettings()

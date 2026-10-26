@@ -28,7 +28,20 @@ class PcmWpfContracts(unittest.TestCase):
         self.assertIn('".Apex6Pcm"', cpp)
         self.assertIn('".Apex6Pcm"', cs)
         self.assertIn('PcmSessionMatches()', cs)
-        self.assertIn('pcmLiveAccessor.ReadUInt32(28) != activeMeasurementGen', cs)
+        self.assertIn('BitConverter.ToUInt32(pcmStoppedSnapshot, 28) != activeMeasurementGen', cs)
+        self.assertIn('using (new PcmGuard(pcmLiveMutex))', cs)
+        self.assertIn('Apex6PcmLock lock(mutex_)', cpp)
+        self.assertIn('version = 2', cpp)
+        self.assertIn('ReadUInt32(4) == 2', cs)
+
+    def test_release_checks_remain_enabled(self):
+        cmake = (ROOT / 'CMakeLists.txt').read_text()
+        native = (ROOT / 'tests/test_pcm_header_standalone.cpp').read_text()
+        self.assertNotRegex(native, r'\bassert\s*\(')
+        self.assertIn('CHECK(frames.load() >= 10000)', native)
+        self.assertIn('PRIVATE NDEBUG', cmake)
+        self.assertIn('/UNDEBUG', cmake)
+        self.assertIn('pcm_check_release_failure', cmake)
 
 if __name__ == '__main__':
     unittest.main()

@@ -61,6 +61,27 @@ if ($LASTEXITCODE -ne 0) { throw 'Header/IPC compilation failed' }
 if ($LASTEXITCODE -ne 0) { throw 'Header/IPC regression failed' }
 ```
 
+The Windows CTest suite now registers `pcm_header_standalone` (explicitly built
+with `NDEBUG`) and `pcm_check_release_failure` (checks CHECK(false) exits with a
+failure). The concurrent test requires 500 acknowledged start/stop cycles, at
+least 20 rendered blocks per measurement and **at least 10,000 actual render
+updates**, with a 30-second CTest timeout. Existing assert-based native suites
+explicitly undefine NDEBUG at their test target only; production builds are unchanged.
+
+PCM IPC version 2 uses a session-specific named mutex for every command and
+snapshot. Stop and the final copy occur in the same critical section; Save uses
+that frozen copy, never a fresh mixture of live fields. Engine and Tray must be
+rebuilt together; version 1 mappings are rejected. This is blocking synchronization:
+UI copies must remain short, with no file writes/UI updates under the lock. Render
+latency under contention remains a Windows/hardware verification requirement.
+
+Manual peak entry has explicit `%` and `abs16` units. `1 abs16` means one sample
+unit, not 1 percent; 0 clears the reference and preserves Original fallback.
+48kHz raw peaks shown by the wizard cover **rendered waveform blocks only** within
+the interval, not every received block or a session-wide maximum. Dropped/stale
+blocks are excluded. Missing or all-zero raw data is shown as unavailable; no
+separate receive-window raw maximum is implemented, and raw peaks never determine gain.
+
 ### Hardware / WPF runtime checks still required
 
 1. Close automatic competing sessions and start the bridge before the game.

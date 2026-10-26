@@ -494,6 +494,8 @@ if(BUILD_TESTING)
             tests/test_pcm_header_standalone.cpp
         )
         target_include_directories(ApexSenseBridgePcmHeaderStandaloneTests PRIVATE src)
+        # Deliberately compile this test with NDEBUG: CHECK must still execute.
+        target_compile_definitions(ApexSenseBridgePcmHeaderStandaloneTests PRIVATE NDEBUG)
         if(MSVC)
             target_compile_options(ApexSenseBridgePcmHeaderStandaloneTests PRIVATE /W4 /permissive- /EHsc)
         else()
@@ -501,6 +503,11 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME pcm_header_standalone
                  COMMAND ApexSenseBridgePcmHeaderStandaloneTests)
+        set_tests_properties(pcm_header_standalone PROPERTIES TIMEOUT 30)
+        add_test(NAME pcm_check_release_failure
+                 COMMAND ${CMAKE_COMMAND}
+                     -DTEST_EXE=$<TARGET_FILE:ApexSenseBridgePcmHeaderStandaloneTests>
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_check_failure.cmake)
 
         add_test(NAME installer_registry_contract
                  COMMAND powershell -NoProfile -NonInteractive
@@ -511,4 +518,17 @@ if(BUILD_TESTING)
                          -ExecutionPolicy Bypass
                          -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify-version-consistency.ps1)
     endif()
+    # Existing native suites use assert() for checks and sometimes operations.
+    # Keep those expressions enabled in every configuration, including Release.
+    get_property(asb_test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(asb_test_target IN LISTS asb_test_targets)
+        if(asb_test_target MATCHES "Tests$" AND
+           NOT asb_test_target STREQUAL "ApexSenseBridgePcmHeaderStandaloneTests")
+            if(MSVC)
+                target_compile_options(${asb_test_target} PRIVATE /UNDEBUG)
+            else()
+                target_compile_options(${asb_test_target} PRIVATE -UNDEBUG)
+            endif()
+        endif()
+    endforeach()
 endif()

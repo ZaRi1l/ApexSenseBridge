@@ -85,6 +85,43 @@ namespace ApexSenseBridgeTray.Models
             ObservedStatus = "none";
         }
 
+        public static bool TryParseManualReference(string text, string unit, out int peakAbs16)
+        {
+            peakAbs16 = 0;
+            double value;
+            if (!double.TryParse(text, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out value) || double.IsNaN(value) || double.IsInfinity(value) || value < 0)
+                return false;
+            if (unit == "%")
+            {
+                if (value > 100) return false;
+                peakAbs16 = (int)Math.Round(value * 327.67);
+                return true;
+            }
+            if (unit != "abs16" || value > 32768 || value != Math.Truncate(value)) return false;
+            peakAbs16 = (int)value;
+            return true;
+        }
+
+        public bool TrySetManualReference(string text, string unit)
+        {
+            int peak;
+            if (!TryParseManualReference(text, unit, out peak)) return false;
+            MeasuredReferencePeakAbs16 = peak;
+            MeasuredReferencePercent = peak / 327.67;
+            ObservedStatus = "manual";
+            return true;
+        }
+
+        public double GetEffectiveGainRatio()
+        {
+            if (Mode == "linear") return LinearGainPercent / 100.0;
+            if (Mode == "companding") return CompandingGainPercent / 100.0;
+            double reference = MeasuredReferencePeakAbs16 > 0 ? MeasuredReferencePeakAbs16 / 327.67 : MeasuredReferencePercent;
+            if (Mode != "normalize" || reference <= 0) return 1.0;
+            return Math.Min(TargetPeakPercent / reference, MaxGainPercent / 100.0);
+        }
+
         public void Normalize()
         {
             if (string.IsNullOrWhiteSpace(Mode)) Mode = "normalize";
@@ -246,38 +283,41 @@ namespace ApexSenseBridgeTray.Models
             }
         }
 
-        public string BuildApex6PcmArguments(string normalizedKey)
+        public Apex6PcmGameSettings ResolveApex6PcmPolicy(string normalizedKey)
         {
             lock (this)
             {
                 var global = GetApex6PcmGlobal();
                 var game = GetApex6PcmGameSettings(normalizedKey);
-
-                string mode = global.Mode;
-                int linear = global.LinearGainPercent;
-                int companding = global.CompandingGainPercent;
-                int target = global.TargetPeakPercent;
-                int maxGain = global.MaxGainPercent;
-                int refPeakAbs16 = 0;
-                double refPct = 0.0;
-
-                // Always check game's measured reference peak, even if game.UseGlobal is true (P0-4)
-                if (game != null)
+                bool inherit = game == null || game.UseGlobal;
+                return new Apex6PcmGameSettings
                 {
-                    refPeakAbs16 = game.MeasuredReferencePeakAbs16;
-                    refPct = game.MeasuredReferencePercent;
-                    if (refPct <= 0.0 && refPeakAbs16 > 0)
-                        refPct = refPeakAbs16 / 327.67;
-                }
+                    UseGlobal = inherit,
+                    Mode = inherit ? global.Mode : game.Mode,
+                    LinearGainPercent = inherit ? global.LinearGainPercent : game.LinearGainPercent,
+                    CompandingGainPercent = inherit ? global.CompandingGainPercent : game.CompandingGainPercent,
+                    TargetPeakPercent = inherit ? global.TargetPeakPercent : game.TargetPeakPercent,
+                    MaxGainPercent = inherit ? global.MaxGainPercent : game.MaxGainPercent,
+                    MeasuredReferencePeakAbs16 = game != null ? game.MeasuredReferencePeakAbs16 : 0,
+                    MeasuredReferencePercent = game != null ? game.MeasuredReferencePercent : 0
+                };
+            }
+        }
 
-                if (game != null && !game.UseGlobal)
-                {
-                    mode = game.Mode;
-                    linear = game.LinearGainPercent;
-                    companding = game.CompandingGainPercent;
-                    target = game.TargetPeakPercent;
-                    maxGain = game.MaxGainPercent;
-                }
+        public string BuildApex6PcmArguments(string normalizedKey)
+        {
+            lock (this)
+            {
+                var policy = ResolveApex6PcmPolicy(normalizedKey);
+                string mode = policy.Mode;
+                int linear = policy.LinearGainPercent;
+                int companding = policy.CompandingGainPercent;
+                int target = policy.TargetPeakPercent;
+                int maxGain = policy.MaxGainPercent;
+                int refPeakAbs16 = policy.MeasuredReferencePeakAbs16;
+                double refPct = policy.MeasuredReferencePercent;
+                if (refPct <= 0.0 && refPeakAbs16 > 0)
+                    refPct = refPeakAbs16 / 327.67;
 
                 if (string.Equals(mode, "original", StringComparison.OrdinalIgnoreCase))
                 {

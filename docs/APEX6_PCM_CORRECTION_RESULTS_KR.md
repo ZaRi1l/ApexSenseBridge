@@ -1,6 +1,20 @@
 # APEX 6 PCM 수정 검증 기록
 
-## 1. 최신 작업 요약 (6개 요청 항목 반영)
+## c32d832 이후 검증 보완
+
+- PCM 단독 테스트는 assert 대신 Release에서도 실행되는 CHECK 사용. CTest에 의도적 실패 확인을 추가했으나 C++/CTest는 이 호스트에서 미실행.
+- 기존 native 테스트 30개 파일을 조사: 대다수 NDEBUG 해제 패턴을 사용하지만 일괄 보장을 위해 기존 테스트 타깃에만 /UNDEBUG 또는 -UNDEBUG 적용. 제품 컴파일 옵션 변경 없음.
+- IPC v2: C++ writer와 C# client 모두 세션 named mutex 사용. 시작 명령·generation·라이브 복사·종료 및 최종 snapshot을 동일 잠금으로 보호. Save는 종료 시 복사된 배열만 사용. 세션 변경 시 폐기. mutex 경합에 의한 렌더 지연은 실기 미검증.
+- 동시성 테스트: 500회 측정마다 실제 20개 블록을 확인하고 stop 이후 추가 20회 렌더에도 측정 결과 불변 확인. 전체 실제 렌더 count >=10000 검사. yield는 스케줄링 보조일 뿐 통과 조건이 아님.
+- UseGlobal UI와 CLI는 같은 ResolveApex6PcmPolicy 결과 사용. 모드/target/linear/curve 및 계산 gain/상한을 상속하며 reference는 게임별 유지. 수동입력·측정·초기화는 상속 상태에서도 접근 가능.
+- 수동 입력: `%`/`abs16` 단위를 명시 선택. 휴리스틱 제거. 0은 기준 제거, NaN/Infinity/음수/overflow/abs16 소수 거부. 경계 및 직렬화 실제 C# 회귀 보강.
+- 48kHz 수치는 **해당 구간에 렌더된 블록 기준**임을 README와 UI에 표기. 수신 후 버려진 블록 제외. 별도 수신 구간 raw maximum은 미구현(요구에서 선택 사항). 정규화 기준은 여전히 보정 전 1kHz.
+- 실제 C# 제품 소스+회귀 컴파일/실행 417 assertions 통과. WPF 정적 계약 3건 통과, Roslyn codebehind 구문 분석 통과. 전체 WPF semantic build 아님.
+- C++ 컴파일·Windows CTest·실제 WPF IPC·APEX4/5/6 하드웨어 검증은 미실행. 새 도구 설치/commit/push 없음.
+
+아래 내용은 이전 c32d832 작업 기록이며 위 보완 내용이 우선합니다.
+
+## 1. 이전 작업 요약 (6개 요청 항목 반영)
 
 1. **전역 Normalize 목표 진폭 및 최대 증폭 배율 UI 구현:**
    - `GameListWindow.xaml`: 전역 설정에 `PnlGlobalApex6PcmNormalize` 추가 (목표 진폭 10..100% 슬라이더/숫자입력, 최대 배율 100..400% 슬라이더/숫자입력).

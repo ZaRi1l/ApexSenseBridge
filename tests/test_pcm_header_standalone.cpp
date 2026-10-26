@@ -1,121 +1,128 @@
 #include "dualsense/Apex6PcmNormalization.h"
 #include "platform/Apex6PcmLiveMetrics.h"
+#include "TestCheck.h"
 #include <atomic>
-#include <cassert>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <string>
 #include <thread>
 
-void testPcmLiveConcurrency() {
 #ifdef _WIN32
-    const std::string token = "aabbccddeeff00112233445566778899";
+class Client {
+public:
+    explicit Client(const std::string& token) {
+        const auto name = "Local\\ApexSenseBridge.Session." + token + ".Apex6Pcm";
+        mutex = OpenMutexA(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE, (name + ".Mutex").c_str());
+        mapping = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, name.c_str());
+        CHECK(mutex && mapping);
+        view = static_cast<asb::platform::Apex6PcmLiveBlock*>(MapViewOfFile(mapping,
+            FILE_MAP_ALL_ACCESS, 0, 0, sizeof(*view)));
+        CHECK(view);
+    }
+    ~Client() { UnmapViewOfFile(view); CloseHandle(mapping); CloseHandle(mutex); }
+    void start(unsigned generation) {
+        asb::platform::Apex6PcmLock lock(mutex); CHECK(lock);
+        view->measurementGeneration = generation;
+        view->measurementActive = 1;
+    }
+    asb::platform::Apex6PcmLiveBlock snapshot(bool stop = false) {
+        asb::platform::Apex6PcmLock lock(mutex); CHECK(lock);
+        if (stop) view->measurementActive = 0;
+        return *view;
+    }
+private:
+    HANDLE mutex{}, mapping{};
+    asb::platform::Apex6PcmLiveBlock* view{};
+};
+
+void testPcmLiveConcurrency() {
+    const auto token = std::to_string(GetCurrentProcessId()) + "-concurrency";
     asb::platform::Apex6PcmLiveServer server(token);
-    HANDLE mapping = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE,
-        ("Local\\ApexSenseBridge.Session." + token + ".Apex6Pcm").c_str());
-    assert(mapping);
-    auto* view = static_cast<asb::platform::Apex6PcmLiveBlock*>(MapViewOfFile(
-        mapping, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(asb::platform::Apex6PcmLiveBlock)));
-    assert(view && view->magic == 0x50365041);
-
+    Client client(token);
     std::atomic_bool running{true};
-    std::atomic_uint64_t audioFrames{0};
-
-    // Thread 1: Audio Render Thread (updating 1kHz blocks)
-    std::thread audioThread([&] {
-        std::uint64_t drops = 0;
-        std::uint64_t processed = 0;
-        std::uint64_t clips = 0;
-        std::uint16_t amp = 1000;
-        while (running.load(std::memory_order_relaxed)) {
-            processed += 16;
-            if (amp > 30000) clips += 2;
-            if ((processed % 800) == 0) drops++;
-            amp = (amp + 7919) % 32768;
-            server.updateLive(amp, amp / 2, amp, amp / 2, 64, 32, 4, true, drops, processed, clips);
-            audioFrames.fetch_add(1, std::memory_order_relaxed);
-            std::this_thread::yield();
+    std::atomic_uint64_t frames{0};
+    std::thread render([&] {
+        std::uint64_t count = 0;
+        while (running.load() || count < 10000) {
+            ++count;
+            server.updateLive(1000, 500, 2000, 1000, 64, 32, 4, true,
+                count / 50, count * 16, count * 2);
+            frames.store(count);
         }
     });
-
-    // Thread 2: UI Client Thread (frequent measurement starts, reads, stops)
-    std::thread uiThread([&] {
-        for (std::uint32_t gen = 1; gen <= 500; ++gen) {
-            view->measurementGeneration = gen;
-            view->measurementActive = 1;
-
-            // Wait a few cycles
-            for (int poll = 0; poll < 10; ++poll) {
-                const auto maxPeak = view->measuredMaxPeak16;
-                const auto proc = view->measuredProcessedSamples;
-                const auto clp = view->measuredClippedSamples;
-                const auto drp = view->measuredDroppedBlocks;
-                assert(maxPeak <= 32768);
-                assert(proc >= clp);
-                assert(drp < 1000000); // verify no unsigned underflow
-                std::this_thread::yield();
-            }
-
-            view->measurementActive = 0;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+    for (unsigned generation = 1; generation <= 500; ++generation) {
+        client.start(generation);
+        asb::platform::Apex6PcmLiveBlock current{};
+        do {
+            CHECK(std::chrono::steady_clock::now() < deadline);
+            current = client.snapshot();
+            std::this_thread::yield();
+        } while (current.sessionGenerationEcho != generation || current.measuredActiveBlocks < 20);
+        CHECK(current.measuredProcessedSamples == current.measuredActiveBlocks * 16);
+        CHECK(current.measuredClippedSamples == current.measuredActiveBlocks * 2);
+        CHECK(current.measuredMaxPeak16 == 1000);
+        const auto stopped = client.snapshot(true);
+        const auto frameAtStop = frames.load();
+        while (frames.load() < frameAtStop + 20) {
+            CHECK(std::chrono::steady_clock::now() < deadline);
             std::this_thread::yield();
         }
-    });
-
-    uiThread.join();
-    running.store(false, std::memory_order_relaxed);
-    audioThread.join();
-
-    UnmapViewOfFile(view);
-    CloseHandle(mapping);
-#endif
+        const auto saved = client.snapshot();
+        CHECK(saved.measuredActiveBlocks == stopped.measuredActiveBlocks);
+        CHECK(saved.measuredProcessedSamples == stopped.measuredProcessedSamples);
+        CHECK(saved.sessionGenerationEcho == generation);
+    }
+    running.store(false);
+    render.join();
+    CHECK(frames.load() >= 10000);
+    std::printf("Render updates: %llu; start/stop cycles: 500\n",
+        static_cast<unsigned long long>(frames.load()));
 }
 
-int main() {
+void testIntervalReset() {
+    const auto token = std::to_string(GetCurrentProcessId()) + "-reset";
+    asb::platform::Apex6PcmLiveServer server(token);
+    Client client(token);
+    server.updateLive(0, 0, 0, 0, 0, 0, 4, true, 5, 160, 2);
+    client.start(1);
+    server.updateLive(9830, 1000, 20000, 1000, 114, 12, 4, true, 6, 176, 3);
+    auto first = client.snapshot(true);
+    CHECK(first.version == 2 && first.measuredProcessedSamples == 16);
+    CHECK(first.measuredClippedSamples == 1 && first.measuredDroppedBlocks == 1);
+    server.updateLive(32767, 0, 32767, 0, 127, 0, 4, true, 7, 184, 4);
+    auto stopped = client.snapshot();
+    CHECK(stopped.measuredMaxPeak16 == 9830 && stopped.rawMeasuredHapticPeak16 == 20000);
+    client.start(2);
+    // No render between start/stop: old generation must not be saved as a new result.
+    CHECK(client.snapshot(true).sessionGenerationEcho != 2);
+    client.start(3);
+    server.updateLive(1000, 0, 1000, 0, 12, 0, 4, true, 7, 192, 4);
+    auto next = client.snapshot(true);
+    CHECK(next.measuredMaxPeak16 == 1000 && next.rawMeasuredHapticPeak16 == 1000);
+    CHECK(next.measuredProcessedSamples == 8 && next.measuredDroppedBlocks == 0);
+}
+#endif
+
+int main(int argc, char** argv) {
+    if (argc > 1 && std::strcmp(argv[1], "--check-failure") == 0) CHECK(false);
     using namespace asb::dualsense;
     Apex6PcmConfig config{};
     config.mode = Apex6PcmMode::Normalize;
     config.referencePeakAbs16 = 10028;
-    config.targetPercent = 90;
     Apex6PcmScaler precise(config);
-    assert(std::abs(precise.state().effectiveGainRatio - 32767.0 * .9 / 10028) < 1e-10);
+    CHECK(std::abs(precise.state().effectiveGainRatio - 32767.0 * .9 / 10028) < 1e-10);
     bool clipped = false;
-    assert(precise.scaleSample(10028, clipped) == 114 && !clipped);
+    CHECK(precise.scaleSample(10028, clipped) == 114 && !clipped);
     config.mode = Apex6PcmMode::Companding;
     config.compandingGainPercent = 175;
     Apex6PcmScaler curve(config);
-    for (int sample = -32768; sample <= 32767; ++sample) {
-        assert(curve.scaleSample(static_cast<std::int16_t>(sample), clipped) ==
+    for (int sample = -32768; sample <= 32767; ++sample)
+        CHECK(curve.scaleSample(static_cast<std::int16_t>(sample), clipped) ==
             scaleApex6Pcm(static_cast<std::int16_t>(sample), 175));
-    }
 #ifdef _WIN32
-    const std::string token = "00112233445566778899aabbccddeeff";
-    asb::platform::Apex6PcmLiveServer server(token);
-    HANDLE mapping = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE,
-        ("Local\\ApexSenseBridge.Session." + token + ".Apex6Pcm").c_str());
-    assert(mapping);
-    auto* view = static_cast<asb::platform::Apex6PcmLiveBlock*>(MapViewOfFile(
-        mapping, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(asb::platform::Apex6PcmLiveBlock)));
-    assert(view && view->magic == 0x50365041);
-    server.updateLive(0, 0, 0, 0, 0, 0, 4, true, 5, 160, 2);
-    view->measurementGeneration = 1;
-    view->measurementActive = 1;
-    server.updateLive(9830, 1000, 9830, 1000, 114, 12, 4, true, 6, 176, 3);
-    assert(view->measuredDroppedBlocks == 1);
-    assert(view->measuredProcessedSamples == 16 && view->measuredClippedSamples == 1);
-    assert(view->rawMeasuredHapticPeak16 == 9830);
-    server.updateLive(1000, 1000, 1000, 1000, 12, 12, 4, true, 6, 192, 3);
-    assert(view->measuredDroppedBlocks == 1);
-    view->measurementActive = 0;
-    server.updateLive(32767, 0, 32767, 0, 127, 0, 4, true, 7, 200, 4);
-    assert(view->measuredMaxPeak16 == 9830);
-    view->measurementGeneration = 2;
-    view->measurementActive = 1;
-    server.updateLive(1000, 0, 1000, 0, 12, 0, 4, true, 7, 208, 4);
-    assert(view->measuredMaxPeak16 == 1000 && view->measuredProcessedSamples == 8);
-    assert(view->measuredDroppedBlocks == 0);
-    UnmapViewOfFile(view);
-    CloseHandle(mapping);
-
+    testIntervalReset();
     testPcmLiveConcurrency();
 #endif
     return 0;

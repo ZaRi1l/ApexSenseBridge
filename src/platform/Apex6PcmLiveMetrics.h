@@ -18,7 +18,7 @@ namespace asb::platform {
 #pragma pack(push, 1)
 struct Apex6PcmLiveBlock {
     std::uint32_t magic = 0x50365041; // "AP6P"
-    std::uint32_t version = 1;
+    std::uint32_t version = 2;
     std::uint32_t measurementActive = 0;
     std::uint32_t measurementGeneration = 0;
 
@@ -45,7 +45,24 @@ struct Apex6PcmLiveBlock {
 };
 #pragma pack(pop)
 
-inline constexpr std::string_view kApex6PcmLiveGlobalMapping = "Local\\ApexSenseBridge.Apex6Pcm.Live";
+static_assert(sizeof(Apex6PcmLiveBlock) == 68);
+
+#ifdef _WIN32
+// Every access, including client commands and copies, holds this session mutex.
+class Apex6PcmLock {
+public:
+    explicit Apex6PcmLock(HANDLE mutex) noexcept : mutex_(mutex) {
+        const auto result = mutex ? WaitForSingleObject(mutex, INFINITE) : WAIT_FAILED;
+        acquired_ = result == WAIT_OBJECT_0; // Abandoned data is not trusted.
+        if (result == WAIT_ABANDONED) ReleaseMutex(mutex);
+    }
+    ~Apex6PcmLock() { if (acquired_) ReleaseMutex(mutex_); }
+    explicit operator bool() const noexcept { return acquired_; }
+private:
+    HANDLE mutex_;
+    bool acquired_ = false;
+};
+#endif
 
 class Apex6PcmLiveServer {
 public:
@@ -54,6 +71,7 @@ public:
         std::string tokenName;
         if (!sessionToken.empty()) {
             tokenName = "Local\\ApexSenseBridge.Session." + std::string(sessionToken) + ".Apex6Pcm";
+            mutex_ = CreateMutexA(nullptr, FALSE, (tokenName + ".Mutex").c_str());
             tokenMapping_ = CreateFileMappingA(
                 INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0,
                 static_cast<DWORD>(sizeof(Apex6PcmLiveBlock)), tokenName.c_str());
@@ -63,9 +81,8 @@ public:
             }
         }
         // Tokenless CLI sessions are not available to the Tray measurement UI.
-        if (view_ != nullptr && view_->magic != 0x50365041) {
-            *view_ = Apex6PcmLiveBlock{};
-        }
+        Apex6PcmLock lock(mutex_);
+        if (lock && view_ != nullptr) *view_ = Apex6PcmLiveBlock{};
 #endif
     }
 
@@ -79,6 +96,7 @@ public:
             CloseHandle(tokenMapping_);
             tokenMapping_ = NULL;
         }
+        if (mutex_) CloseHandle(mutex_);
 #endif
     }
 
@@ -90,7 +108,8 @@ public:
                     std::uint64_t totalProcessedSamples,
                     std::uint64_t totalClippedSamples) noexcept {
 #ifdef _WIN32
-        if (view_ == nullptr) return;
+        Apex6PcmLock lock(mutex_);
+        if (!lock || view_ == nullptr) return;
 
         view_->currentLeftPeak16 = left16;
         view_->currentRightPeak16 = right16;
@@ -159,7 +178,8 @@ public:
 
     [[nodiscard]] bool isMeasurementActive() const noexcept {
 #ifdef _WIN32
-        return view_ != nullptr && view_->measurementActive != 0;
+        Apex6PcmLock lock(mutex_);
+        return lock && view_ != nullptr && view_->measurementActive != 0;
 #else
         return false;
 #endif
@@ -167,6 +187,7 @@ public:
 
 private:
 #ifdef _WIN32
+    HANDLE mutex_ = NULL;
     HANDLE tokenMapping_ = NULL;
     Apex6PcmLiveBlock* view_ = nullptr;
     ULONGLONG measurementStartedTicks_ = 0;

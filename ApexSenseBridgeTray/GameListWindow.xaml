@@ -700,9 +700,12 @@
                                                                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                                                                     <TextBox x:Name="TxtBoxApex6PcmManualRef" Width="55" Height="22" Background="#1E293B" Foreground="#38BDF8"
                                                                              BorderBrush="#334155" BorderThickness="1" TextAlignment="Right" FontSize="11" Padding="2,1"
-                                                                             ToolTip="{DynamicResource Loc_Apex6PcmManualRefHint}"
+                                                                             ToolTip="abs16: 0–32768 (integer); %: 0–100. Zero clears the reference."
                                                                              KeyDown="OnApex6PcmManualRefKeyDown" LostFocus="OnApex6PcmManualRefLostFocus"/>
-                                                                    <TextBlock Text=" (amp)" Style="{StaticResource ValueLabel}" VerticalAlignment="Center" FontSize="10" Foreground="{DynamicResource TextMuted}"/>
+                                                                    <ComboBox x:Name="CmbApex6PcmManualRefUnit" Style="{StaticResource ExecutableCombo}" Width="65" Margin="4,0,0,0" SelectedIndex="0" SelectionChanged="OnApex6PcmManualRefUnitChanged">
+                                                                        <ComboBoxItem Content="abs16" Tag="abs16"/>
+                                                                        <ComboBoxItem Content="%" Tag="%"/>
+                                                                    </ComboBox>
                                                                 </StackPanel>
                                                                 <TextBlock Text="{DynamicResource Loc_Apex6PcmReference}" Style="{StaticResource RowLabel}"/>
                                                             </DockPanel>
@@ -723,7 +726,7 @@
                                                                 </StackPanel>
                                                                 <TextBlock Text="{DynamicResource Loc_Apex6PcmTarget}" Style="{StaticResource RowLabel}"/>
                                                             </DockPanel>
-                                                            <Slider x:Name="SliderApex6PcmTarget" Style="{StaticResource EffectSlider}" Minimum="10" Maximum="100"
+                                                            <Slider x:Name="SliderApex6PcmTarget" Style="{StaticResource EffectSlider}" Minimum="1" Maximum="100"
                                                                     TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="OnApex6PcmTargetChanged" Margin="0,4,0,0"/>
                                                         </StackPanel>
                                                     </Border>
@@ -1207,7 +1210,7 @@
                                                                 </StackPanel>
                                                                 <TextBlock Text="{DynamicResource Loc_Apex6PcmTarget}" Style="{StaticResource RowLabel}"/>
                                                             </DockPanel>
-                                                            <Slider x:Name="SliderGlobalApex6PcmTarget" Style="{StaticResource EffectSlider}" Minimum="10" Maximum="100"
+                                                            <Slider x:Name="SliderGlobalApex6PcmTarget" Style="{StaticResource EffectSlider}" Minimum="1" Maximum="100"
                                                                     TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="OnGlobalApex6PcmTargetChanged" Margin="0,2,0,4"/>
 
                                                             <DockPanel Margin="0,2,0,2">
