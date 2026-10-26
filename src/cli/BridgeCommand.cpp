@@ -365,7 +365,7 @@ int commandBridgeTriggers(int argc, char** argv) {
         ? std::make_unique<asb::dualsense::Apex6HapticBridge>(
               *device, hapticConfig, options.routeRumble, options.triggerStrengthPercent,
               options.vibrationStrengthPercent, options.apex6PcmConfig,
-              options.sessionToken.value_or(std::string{}))
+              options.sessionToken.value_or(std::string{}), options.apex6PcmGameKey)
         : std::unique_ptr<asb::dualsense::Apex6HapticBridge>{};
     if (apex6Bridge) {
         apex6Bridge->updateTriggerPositions(initialInput.l2, initialInput.r2);

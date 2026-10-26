@@ -1,4 +1,5 @@
 #include "cli/BridgeOptions.h"
+#include "platform/Apex6PcmControl.h"
 
 #include "flydigi/Apex5Protocol.h"
 #include "platform/SessionControl.h"
@@ -155,6 +156,41 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
                 error = "--apex6-haptic-gain requires an integer percentage from 100 to 200.";
                 return false;
             }
+        } else if (value == "--apex6-pcm-game-key" || value == "--apex6-pcm-game-key-hex") {
+            if (++i >= argc || !options.apex6PcmGameKey.empty()) {
+                error = "Specify exactly one PCM game key, directly or UTF-8 hex encoded.";
+                return false;
+            }
+            std::string key = argv[i];
+            if (value == "--apex6-pcm-game-key-hex") {
+                const auto digit = [](char c) -> int {
+                    if (c >= '0' && c <= '9') return c - '0';
+                    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+                    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+                    return -1;
+                };
+                if (key.empty() || key.size() > 510 || key.size() % 2 != 0) {
+                    error = "PCM game key hex requires 2 to 510 hexadecimal characters.";
+                    return false;
+                }
+                std::string decoded;
+                decoded.reserve(key.size() / 2);
+                for (std::size_t index = 0; index < key.size(); index += 2) {
+                    const auto high = digit(key[index]);
+                    const auto low = digit(key[index + 1]);
+                    if (high < 0 || low < 0) {
+                        error = "PCM game key hex contains a non-hexadecimal character.";
+                        return false;
+                    }
+                    decoded.push_back(static_cast<char>(high * 16 + low));
+                }
+                key = std::move(decoded);
+            }
+            if (!asb::platform::Apex6PcmControlServer::validGameKey(key)) {
+                error = "PCM game key requires 1 to 255 UTF-8 bytes without NUL.";
+                return false;
+            }
+            options.apex6PcmGameKey = std::move(key);
         } else if (value == "--apex6-pcm-mode") {
             if (++i >= argc) {
                 error = "--apex6-pcm-mode requires one of: original, companding, linear, normalize.";
@@ -431,6 +467,7 @@ std::string_view bridgeCommandUsage() noexcept {
            "[--sync-lightbar] [--haptic-threshold 0..95] "
            "[--trigger-strength 0..100] [--vibration-strength 0..200] "
            "[--apex6-haptic-gain 100..200] "
+           "[--apex6-pcm-game-key UTF8KEY | --apex6-pcm-game-key-hex UTF8HEX] "
            "[--apex6-pcm-mode original|companding|linear|normalize] "
            "[--apex6-pcm-linear-gain-percent 0..400] "
            "[--apex6-pcm-companding-gain-percent 100..200] "

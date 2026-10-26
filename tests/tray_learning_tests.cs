@@ -54,6 +54,9 @@ internal static class TrayLearningTests
             TestManualFixGamesPreservePhysicalInput();
             TestPerGameApexProfileSettings();
             TestApex6PcmSettings();
+            TestPcmControl();
+            Assert(typeof(EngineSessionManager).Assembly.GetType("ApexSenseBridgeTray.Services.Apex6PcmControlClient") != null,
+                "Live PCM client must be available for acknowledged engine updates");
             TestOnboardProfileSelectorLock();
             TestManualBridgeModeIsNotPersisted();
             TestSharedBridgeArguments();
@@ -88,6 +91,76 @@ internal static class TrayLearningTests
         {
             try { Directory.Delete(testRoot, true); } catch { }
         }
+    }
+
+    private static void TestPcmControl()
+    {
+        Assert(typeof(EngineSessionManager).Assembly.GetType("ApexSenseBridgeTray.Services.PcmEditDebouncer") != null, "PCM edits need a flushable debounce coordinator");
+        int commits = 0;
+        var debounce = new PcmEditDebouncer(() => commits++);
+        for (int i = 0; i < 20; i++) { debounce.Schedule(); debounce.Tick(); }
+        Assert(commits == 0, "rapid edits must not write disk or IPC immediately");
+        Thread.Sleep(180); debounce.Tick();
+        Assert(commits == 1, "quiet period coalesces edits to one commit");
+        debounce.Schedule(); debounce.Flush(); debounce.Flush();
+        Assert(commits == 2, "drag or close flush writes final edit exactly once");
+        var settings = new TraySettings();
+        var request = Apex6PcmControlClient.CreateRequest(" GAME ", settings.ResolveApex6PcmPolicy("game"));
+        Assert(BitConverter.ToUInt32(request, 276) == 0, "unmeasured normalize must request original");
+        Assert(Encoding.UTF8.GetString(request, 20, 4) == "game", "identity must be normalized");
+        var linearRequest = Apex6PcmControlClient.CreateRequest("게임 키", new Apex6PcmGameSettings { Mode = "linear" });
+        Assert(BitConverter.ToUInt32(linearRequest, 276) == 2 && BitConverter.ToUInt32(linearRequest, 300) == 100, "wire enum and legacy bounds match engine");
+        var builder = typeof(EngineSessionManager).GetMethod("BuildArguments", BindingFlags.Static | BindingFlags.NonPublic);
+        string unicodeArgs = (string)builder.Invoke(null, new object[] { "standard", settings, 0, "게임 키" });
+        Assert(unicodeArgs.Contains("--apex6-pcm-game-key-hex " + BitConverter.ToString(Encoding.UTF8.GetBytes("게임 키")).Replace("-", "").ToLowerInvariant()), "startup identity uses UTF8 hex rather than Windows ACP");
+        var reference = new Apex6PcmGameSettings { UseGlobal = true };
+        Assert(reference.TrySetManualReference("1234", "abs16"), "manual exact reference accepted");
+        settings.SetApex6PcmGameSettings("active", reference);
+        settings.GetApex6PcmGlobal().Mode = "normalize";
+        var active = Apex6PcmControlClient.CreateRequest("active", settings.ResolveApex6PcmPolicy("active"));
+        Assert(BitConverter.ToUInt32(active, 276) == 3 && BitConverter.ToUInt32(active, 288) == 1234, "inherited normalize preserves exact game reference");
+        settings.GetApex6PcmGlobal().Mode = "original";
+        Assert(BitConverter.ToUInt32(Apex6PcmControlClient.CreateRequest("active", settings.ResolveApex6PcmPolicy("active")), 276) == 0, "global disable sends explicit original");
+        settings.SetApex6PcmGameSettings("other", new Apex6PcmGameSettings { UseGlobal = false, Mode = "linear", LinearGainPercent = 350 });
+        Assert(BitConverter.ToUInt32(Apex6PcmControlClient.CreateRequest("active", settings.ResolveApex6PcmPolicy("active")), 276) == 0, "editing a different selected game cannot select its policy for active engine");
+        bool rejected = false;
+        try { Apex6PcmControlClient.NormalizeGameKey(new string('가', 86)); } catch (ArgumentException) { rejected = true; }
+        Assert(rejected, "UTF8 byte length must reject oversized identity without truncation");
+        foreach (uint status in new uint[] { 1, 3, 5 })
+        {
+            string token = Guid.NewGuid().ToString("N");
+            string name = @"Local\ApexSenseBridge.Session." + token + ".Apex6PcmControl";
+            using (var map = System.IO.MemoryMappedFiles.MemoryMappedFile.CreateNew(name, 308))
+            using (var view = map.CreateViewAccessor())
+            using (var mutex = new Mutex(false, name + ".Mutex"))
+            {
+                view.Write(0, 0x43365041u); view.Write(4, 1u); view.Write(8, 42u); view.Write(12, 42u);
+                view.WriteArray(20, Encoding.UTF8.GetBytes("game"), 0, 4);
+                var task = new Apex6PcmControlClient().ApplyAsync(token, request, 600);
+                Assert(SpinWait.SpinUntil(() => view.ReadUInt32(8) == 43, 400), "client must advance existing revision");
+                Assert(!task.IsCompleted, "publication is not application");
+                Thread.Sleep(30);
+                mutex.WaitOne();
+                try { view.Write(16, status); if (status == 1) view.Write(12, 43u); } finally { mutex.ReleaseMutex(); }
+                Assert(task.GetAwaiter().GetResult() == (status == 1 ? "Applied" : "Error: engine status " + status), "only Applied ACK counts as success");
+                view.Write(4, 2u);
+                Assert(new Apex6PcmControlClient().ApplyAsync(token, request).GetAwaiter().GetResult().Contains("InvalidProtocol"), "version mismatch is explicit");
+                view.Write(4, 1u); view.Write(12, 0u);
+                Assert(new Apex6PcmControlClient().ApplyAsync(token, request, 80).GetAwaiter().GetResult().StartsWith("Disconnected"), "stale ACK must time out");
+                view.Write(16, 4u);
+                uint next = view.ReadUInt32(8) + 1;
+                var recovered = new Apex6PcmControlClient().ApplyAsync(token, request, 600);
+                Assert(SpinWait.SpinUntil(() => view.ReadUInt32(8) == next, 400), "new request follows rejected request");
+                mutex.WaitOne();
+                try { view.Write(16, 1u); view.Write(12, next); } finally { mutex.ReleaseMutex(); }
+                Assert(recovered.GetAwaiter().GetResult() == "Applied", "previous rejection cannot poison new request");
+                view.Write(16, 6u);
+                Assert(new Apex6PcmControlClient().ApplyAsync(token, request).GetAwaiter().GetResult() == "Disconnected", "offline is distinct from engine rejection");
+                view.Write(16, 0u); view.Write(20, (byte)'x');
+                Assert(new Apex6PcmControlClient().ApplyAsync(token, request).GetAwaiter().GetResult() == "Error: WrongGame", "foreign mapping cannot be overwritten");
+            }
+        }
+        Assert(new Apex6PcmControlClient().ApplyAsync(Guid.NewGuid().ToString("N"), request).GetAwaiter().GetResult() == "Disconnected", "missing mapping is disconnected");
     }
 
     private static void TestReleaseAssetPolicy()

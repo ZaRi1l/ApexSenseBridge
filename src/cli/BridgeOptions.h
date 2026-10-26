@@ -47,6 +47,7 @@ struct BridgeCommandOptions {
     unsigned int apex4GyroYawStrengthPercent = 100;
     bool hapticThresholdExplicit = false;
     std::optional<unsigned int> xinputIndex;
+    std::string apex6PcmGameKey;
     std::optional<std::string> sessionToken;
     std::optional<std::uint32_t> sessionOwnerProcessId;
     std::optional<std::uint8_t> apexProfileSlot;

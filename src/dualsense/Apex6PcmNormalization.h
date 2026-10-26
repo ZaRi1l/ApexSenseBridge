@@ -52,7 +52,7 @@ struct Apex6PcmScalingState {
     double effectiveGainRatio = 1.0;
     bool gainLimited = false;
     bool valid = true;
-    std::string status = "valid";
+    std::string_view status = "valid";
 };
 
 class Apex6PcmScaler {

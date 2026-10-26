@@ -24,6 +24,21 @@ namespace ApexSenseBridgeTray
 {
     public partial class GameListWindow : Window
     {
+        private PcmEditDebouncer pcmEdits;
+        private readonly System.Windows.Threading.DispatcherTimer pcmEditTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(25) };
+        private void QueuePcmEdit() { if (pcmEdits != null) { sessionManager?.InvalidatePcmPolicy(); pcmEdits.Schedule(); } }
+        private void UpdatePcmControlStatus()
+        {
+            if (TxtApex6PcmControlStatus == null) return;
+            string status = sessionManager == null ? "Disconnected" : sessionManager.PcmControlStatus;
+            string label = status == "Applied" ? "Loc_Apex6PcmApplied" : status == "Pending" ? "Loc_Apex6PcmPending" :
+                status.StartsWith("Disconnected", StringComparison.Ordinal) ? "Loc_Apex6PcmDisconnected" : "Loc_Apex6PcmFailed";
+            TxtApex6PcmControlStatus.Text = LocalizationManager.Get(label) +
+                (sessionManager != null && sessionManager.IsSessionActive ? " — " + sessionManager.ActiveGameTitle : string.Empty);
+            TxtApex6PcmControlStatus.ToolTip = status;
+        }
+        private void OnPcmControlChanged() { Dispatcher.BeginInvoke(new Action(UpdatePcmControlStatus)); }
+
         private readonly CloudGameListService gameListService;
         private readonly TraySettings settings;
         private readonly ExecutableLearningService learningService;
@@ -70,6 +85,17 @@ namespace ApexSenseBridgeTray
             this.updateChecker = updateChecker;
 
             InitializeComponent();
+            pcmEdits = new PcmEditDebouncer(() => { settings.Save(); sessionManager?.RefreshPcmPolicy(settings); });
+            pcmEditTimer.Tick += (s, e) => pcmEdits.Tick();
+            pcmEditTimer.Start();
+            foreach (var slider in new[] { SliderGlobalApex6PcmLinear, SliderGlobalApex6PcmCompanding, SliderGlobalApex6PcmTarget, SliderGlobalApex6PcmMaxGain, SliderApex6PcmLinear, SliderApex6PcmCompanding, SliderApex6PcmTarget, SliderApex6PcmMaxGain })
+            {
+                slider.AddHandler(System.Windows.Controls.Primitives.Thumb.DragCompletedEvent,
+                    new System.Windows.Controls.Primitives.DragCompletedEventHandler((s, e) => pcmEdits.Flush()), true);
+                slider.AddHandler(Mouse.PreviewMouseUpEvent, new MouseButtonEventHandler((s, e) => pcmEdits.Flush()), true);
+            }
+            if (sessionManager != null) { sessionManager.PcmControlChanged += OnPcmControlChanged; sessionManager.StateChanged += OnPcmControlChanged; }
+            UpdatePcmControlStatus();
             WindowCorners.ApplyRounded(this);
             viewInitialized = true;
 
@@ -2563,7 +2589,7 @@ namespace ApexSenseBridgeTray
             if (item == null) return;
             var global = settings.GetApex6PcmGlobal();
             global.Mode = (item.Tag as string) ?? "original";
-            settings.Save();
+            QueuePcmEdit();
             if (PnlGlobalApex6PcmCompanding != null)
             {
                 PnlGlobalApex6PcmCompanding.Visibility = global.Mode == "companding" ? Visibility.Visible : Visibility.Collapsed;
@@ -2588,7 +2614,7 @@ namespace ApexSenseBridgeTray
             {
                 TxtBoxGlobalApex6PcmLinear.Text = global.LinearGainPercent.ToString(CultureInfo.InvariantCulture);
             }
-            settings.Save();
+            QueuePcmEdit();
             UpdateApex6PcmDetailPane();
         }
 
@@ -2599,7 +2625,7 @@ namespace ApexSenseBridgeTray
             global.TargetPeakPercent = (int)SliderGlobalApex6PcmTarget.Value;
             if (TxtBoxGlobalApex6PcmTarget != null)
                 TxtBoxGlobalApex6PcmTarget.Text = global.TargetPeakPercent.ToString(CultureInfo.InvariantCulture);
-            settings.Save();
+            QueuePcmEdit();
             UpdateApex6PcmDetailPane();
         }
 
@@ -2610,7 +2636,7 @@ namespace ApexSenseBridgeTray
             global.MaxGainPercent = (int)SliderGlobalApex6PcmMaxGain.Value;
             if (TxtBoxGlobalApex6PcmMaxGain != null)
                 TxtBoxGlobalApex6PcmMaxGain.Text = global.MaxGainPercent.ToString(CultureInfo.InvariantCulture);
-            settings.Save();
+            QueuePcmEdit();
             UpdateApex6PcmDetailPane();
         }
 
@@ -2697,6 +2723,10 @@ namespace ApexSenseBridgeTray
                     }
                 }
 
+                RowApex6PcmMaxGain.IsEnabled = !useGlobal;
+                RowApex6PcmMaxGain.Visibility = currentMode == "normalize" ? Visibility.Visible : Visibility.Collapsed;
+                SliderApex6PcmMaxGain.Value = policy.MaxGainPercent;
+                TxtBoxApex6PcmMaxGain.Text = policy.MaxGainPercent.ToString(CultureInfo.InvariantCulture);
                 int targetPct = policy.TargetPeakPercent;
                 if (SliderApex6PcmTarget != null) SliderApex6PcmTarget.Value = targetPct;
                 if (TxtBoxApex6PcmTarget != null) TxtBoxApex6PcmTarget.Text = targetPct.ToString(CultureInfo.InvariantCulture);
@@ -2779,7 +2809,7 @@ namespace ApexSenseBridgeTray
 
             gameSettings.UseGlobal = ChkApex6PcmUseGlobal.IsChecked.GetValueOrDefault(true);
             settings.SetApex6PcmGameSettings(game.Normalized, gameSettings);
-            settings.Save();
+            QueuePcmEdit();
 
             if (PnlApex6PcmCustomControls != null)
             {
@@ -2800,7 +2830,7 @@ namespace ApexSenseBridgeTray
 
             gameSettings.Mode = (item.Tag as string) ?? "normalize";
             settings.SetApex6PcmGameSettings(game.Normalized, gameSettings);
-            settings.Save();
+            QueuePcmEdit();
 
             UpdateApex6PcmDetailPane();
         }
@@ -2815,12 +2845,25 @@ namespace ApexSenseBridgeTray
             gameSettings.TargetPeakPercent = (int)SliderApex6PcmTarget.Value;
             if (TxtBoxApex6PcmTarget != null) TxtBoxApex6PcmTarget.Text = gameSettings.TargetPeakPercent.ToString(CultureInfo.InvariantCulture);
             settings.SetApex6PcmGameSettings(game.Normalized, gameSettings);
-            settings.Save();
+            QueuePcmEdit();
 
             double refPct = gameSettings.MeasuredReferencePeakAbs16 > 0
                 ? gameSettings.MeasuredReferencePeakAbs16 / 327.67 : gameSettings.MeasuredReferencePercent;
             UpdateApex6PcmEffectiveGainDisplay(gameSettings.Mode, refPct, gameSettings.TargetPeakPercent, gameSettings.LinearGainPercent);
         }
+
+        private void OnApex6PcmMaxGainChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (updatingApex6PcmUi || SelectedGame == null || settings == null) return;
+            var value = settings.GetApex6PcmGameSettings(SelectedGame.Normalized) ?? new Apex6PcmGameSettings();
+            value.MaxGainPercent = (int)SliderApex6PcmMaxGain.Value;
+            TxtBoxApex6PcmMaxGain.Text = value.MaxGainPercent.ToString(CultureInfo.InvariantCulture);
+            settings.SetApex6PcmGameSettings(SelectedGame.Normalized, value);
+            QueuePcmEdit();
+            UpdateApex6PcmEffectiveGainDisplay(value.Mode, value.MeasuredReferencePercent, value.TargetPeakPercent, value.LinearGainPercent);
+        }
+        private void OnApex6PcmMaxGainTextLostFocus(object s, RoutedEventArgs e) { CommitPcmNumber(TxtBoxApex6PcmMaxGain, SliderApex6PcmMaxGain); }
+        private void OnApex6PcmMaxGainTextKeyDown(object s, KeyEventArgs e) { if (e.Key == Key.Enter) { OnApex6PcmMaxGainTextLostFocus(s, e); e.Handled = true; } }
 
         private void OnApex6PcmLinearChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
@@ -2832,7 +2875,7 @@ namespace ApexSenseBridgeTray
             gameSettings.LinearGainPercent = (int)SliderApex6PcmLinear.Value;
             if (TxtBoxApex6PcmLinear != null) TxtBoxApex6PcmLinear.Text = gameSettings.LinearGainPercent.ToString(CultureInfo.InvariantCulture);
             settings.SetApex6PcmGameSettings(game.Normalized, gameSettings);
-            settings.Save();
+            QueuePcmEdit();
 
             UpdateApex6PcmEffectiveGainDisplay(gameSettings.Mode, gameSettings.MeasuredReferencePercent, gameSettings.TargetPeakPercent, gameSettings.LinearGainPercent);
         }
@@ -2844,7 +2887,7 @@ namespace ApexSenseBridgeTray
             value.CompandingGainPercent = (int)SliderApex6PcmCompanding.Value;
             TxtBoxApex6PcmCompanding.Text = value.CompandingGainPercent.ToString(CultureInfo.InvariantCulture);
             settings.SetApex6PcmGameSettings(SelectedGame.Normalized, value);
-            settings.Save();
+            QueuePcmEdit();
         }
 
         private void OnGlobalApex6PcmCompandingChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -2853,7 +2896,7 @@ namespace ApexSenseBridgeTray
             var value = settings.GetApex6PcmGlobal();
             value.CompandingGainPercent = (int)SliderGlobalApex6PcmCompanding.Value;
             TxtBoxGlobalApex6PcmCompanding.Text = value.CompandingGainPercent.ToString(CultureInfo.InvariantCulture);
-            settings.Save();
+            QueuePcmEdit();
             UpdateApex6PcmDetailPane();
         }
 
@@ -3182,7 +3225,7 @@ namespace ApexSenseBridgeTray
             // Saving a reference does not change the selected global/override policy.
 
             settings.SetApex6PcmGameSettings(game.Normalized, gameSettings);
-            settings.Save();
+            QueuePcmEdit();
 
             UpdateApex6PcmDetailPane();
         }
@@ -3199,7 +3242,7 @@ namespace ApexSenseBridgeTray
                 return;
             }
             settings.SetApex6PcmGameSettings(SelectedGame.Normalized, gameSettings);
-            settings.Save();
+            QueuePcmEdit();
             UpdateApex6PcmDetailPane();
         }
 
@@ -3223,7 +3266,7 @@ namespace ApexSenseBridgeTray
             if (SelectedGame == null || settings == null) return;
             DisconnectPcmMeasurement();
             settings.SetApex6PcmGameSettings(SelectedGame.Normalized, null);
-            settings.Save();
+            QueuePcmEdit();
             UpdateApex6PcmDetailPane();
         }
 
@@ -3426,6 +3469,9 @@ namespace ApexSenseBridgeTray
 
         protected override void OnClosed(EventArgs e)
         {
+            pcmEdits?.Flush();
+            pcmEditTimer.Stop();
+            if (sessionManager != null) { sessionManager.PcmControlChanged -= OnPcmControlChanged; sessionManager.StateChanged -= OnPcmControlChanged; }
             statusTimer.Stop();
             DisconnectPcmMeasurement();
             controllerDetection?.Dispose();

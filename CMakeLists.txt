@@ -279,6 +279,14 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME rumble_bridge COMMAND ApexSenseBridgeRumbleTests)
 
+    add_executable(ApexSenseBridgeApex6PcmControlTests
+        tests/test_apex6_pcm_control.cpp
+        src/cli/BridgeOptions.cpp
+        src/dualsense/TouchpadGestureProfile.cpp
+        src/platform/SessionControl.cpp)
+    target_link_libraries(ApexSenseBridgeApex6PcmControlTests PRIVATE asb_core)
+    add_test(NAME apex6_pcm_control COMMAND ApexSenseBridgeApex6PcmControlTests)
+
     add_executable(ApexSenseBridgeApex6HapticTests
         tests/test_apex6_haptic_bridge.cpp
     )

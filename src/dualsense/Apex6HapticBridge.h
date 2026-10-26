@@ -8,6 +8,7 @@
 #include "flydigi/Apex6Protocol.h"
 #include "haptics/HapticProcessor.h"
 #include "platform/Apex6PcmLiveMetrics.h"
+#include "platform/Apex6PcmControl.h"
 
 #include <array>
 #include <atomic>
@@ -141,7 +142,8 @@ public:
                                bool routeGrips = true, unsigned triggerStrengthPercent = 100,
                                unsigned vibrationStrengthPercent = 100,
                                Apex6PcmConfig pcmConfig = {},
-                               std::string_view sessionToken = {});
+                               std::string_view sessionToken = {},
+                               std::string_view gameKey = {});
     explicit Apex6HapticBridge(flydigi::Apex5Device& device,
                                haptics::HapticConfig config,
                                bool routeGrips, unsigned triggerStrengthPercent,
@@ -200,6 +202,10 @@ private:
     unsigned pcmGainPercent_ = 100;
     Apex6PcmScaler pcmScaler_{};
     platform::Apex6PcmLiveServer liveServer_{};
+    platform::Apex6PcmControlServer controlServer_;
+    mutable std::mutex pcmStatsMutex_;
+    Apex6PcmConfig pcmStatsConfig_{};
+    Apex6PcmScalingState pcmStatsState_{};
     std::atomic_uint pcmAudioChannels_{0};
     std::atomic_bool pcmAudioVerified_{false};
     std::uint64_t triggerSampleOffset_ = 0;

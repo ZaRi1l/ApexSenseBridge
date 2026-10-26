@@ -58,6 +58,69 @@ namespace ApexSenseBridgeTray.Services
         private const string EngineSessionMutexName =
             @"Local\ApexSenseBridge.ActiveSession.Owner.v1";
         private readonly object syncLock = new object();
+        private readonly Apex6PcmControlClient pcmClient = new Apex6PcmControlClient();
+        private byte[] desiredPcm;
+        private int pcmGeneration;
+        private bool pcmPending;
+        private bool pcmSending;
+        private string pcmStatus = "Disconnected";
+        public event Action PcmControlChanged;
+
+        public string PcmControlStatus { get { lock (syncLock) return activeSession == null ? "Disconnected" : pcmStatus; } }
+
+        public void InvalidatePcmPolicy()
+        {
+            lock (syncLock) { pcmGeneration++; pcmPending = false; pcmStatus = "Pending"; }
+            PcmControlChanged?.Invoke();
+        }
+
+        public void RefreshPcmPolicy(TraySettings settings)
+        {
+            lock (syncLock)
+            {
+                pcmGeneration++;
+                pcmStatus = activeSession == null ? "Disconnected" : "Pending";
+                try
+                {
+                    desiredPcm = settings == null || activeSession == null ? null :
+                        Apex6PcmControlClient.CreateRequest(activeGameKey, settings.ResolveApex6PcmPolicy(activeGameKey));
+                }
+                catch (ArgumentException ex) { desiredPcm = null; pcmStatus = "Error: " + ex.Message; }
+                pcmPending = desiredPcm != null;
+            }
+            PcmControlChanged?.Invoke();
+            PumpPcmPolicy();
+        }
+
+        private async void PumpPcmPolicy()
+        {
+            string token, key;
+            int generation;
+            byte[] request;
+            lock (syncLock)
+            {
+                if (!pcmPending || pcmSending || activeSession == null) return;
+                pcmSending = true;
+                token = activeSession.Token; key = activeGameKey;
+                generation = pcmGeneration; request = desiredPcm;
+            }
+            string result = await pcmClient.ApplyAsync(token, request).ConfigureAwait(false);
+            bool notify = false;
+            bool drain = false;
+            lock (syncLock)
+            {
+                pcmSending = false;
+                drain = pcmGeneration != generation && pcmPending;
+                if (activeSession != null && activeSession.Token == token && activeGameKey == key && pcmGeneration == generation)
+                {
+                    pcmStatus = result;
+                    pcmPending = result.StartsWith("Disconnected", StringComparison.Ordinal) || result == "Pending";
+                    notify = true;
+                }
+            }
+            if (notify) PcmControlChanged?.Invoke();
+            if (drain) PumpPcmPolicy();
+        }
         private BridgeSession activeSession;
         private string activeGameTitle;
         private string activeProfile;
@@ -118,6 +181,7 @@ namespace ApexSenseBridgeTray.Services
 
         private void CheckHealth(object unused)
         {
+            PumpPcmPolicy();
             if (Interlocked.Exchange(ref checkingHealth, 1) != 0) return;
             try
             {
@@ -168,7 +232,11 @@ namespace ApexSenseBridgeTray.Services
             finally { Interlocked.Exchange(ref checkingHealth, 0); }
         }
 
-        public void Dispose() { healthTimer.Dispose(); }
+        public void Dispose()
+        {
+            healthTimer.Dispose();
+            lock (syncLock) { pcmGeneration++; pcmPending = false; pcmStatus = "Disconnected"; }
+        }
 
         public void ReportActivationRefused(string gameTitle, string reason)
         {
@@ -323,7 +391,7 @@ namespace ApexSenseBridgeTray.Services
                 controller = null;
                 activeProfileName = profileName;
                 activeApexSlot = apexProfileSlot;
-                activeGameKey = gameKey;
+                activeGameKey = (gameKey ?? string.Empty).Trim().ToLowerInvariant();
             }
             StateChanged?.Invoke();
 
@@ -405,6 +473,7 @@ namespace ApexSenseBridgeTray.Services
                 }
                 catch { }
 
+                RefreshPcmPolicy(settings);
                 var startHandler = SessionStarted;
                 if (startHandler != null)
                 {
@@ -524,7 +593,12 @@ namespace ApexSenseBridgeTray.Services
         private static string BuildArguments(string profileName, TraySettings settings,
                                              int apexProfileSlot, string gameKey)
         {
-            string pcmArgs = settings != null ? settings.BuildApex6PcmArguments(gameKey) : null;
+            gameKey = (gameKey ?? string.Empty).Trim().ToLowerInvariant();
+            string keyHex;
+            try { keyHex = BitConverter.ToString(System.Text.Encoding.UTF8.GetBytes(Apex6PcmControlClient.NormalizeGameKey(gameKey))).Replace("-", string.Empty).ToLowerInvariant(); }
+            catch (ArgumentException) { keyHex = string.Empty; }
+            string pcmArgs = (settings != null ? settings.BuildApex6PcmArguments(gameKey) : string.Empty) +
+                (keyHex.Length == 0 ? string.Empty : " --apex6-pcm-game-key-hex " + keyHex);
             var arguments = BridgeArguments.Build(profileName, false, 12, false, apexProfileSlot,
                 100, 100, 100, 100, pcmArgs);
             // Send all model profiles; only the engine's verified device selects

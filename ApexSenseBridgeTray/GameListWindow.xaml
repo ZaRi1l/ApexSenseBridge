@@ -731,6 +731,18 @@
                                                         </StackPanel>
                                                     </Border>
 
+                                                    <Border x:Name="RowApex6PcmMaxGain" Style="{StaticResource SettingRow}" Margin="0,2,0,4">
+                                                        <StackPanel>
+                                                            <DockPanel>
+                                                                <TextBox x:Name="TxtBoxApex6PcmMaxGain" DockPanel.Dock="Right" Width="40" TextAlignment="Right"
+                                                                         KeyDown="OnApex6PcmMaxGainTextKeyDown" LostFocus="OnApex6PcmMaxGainTextLostFocus"/>
+                                                                <TextBlock Text="{DynamicResource Loc_Apex6PcmMaxGain}" Style="{StaticResource RowLabel}"/>
+                                                            </DockPanel>
+                                                            <Slider x:Name="SliderApex6PcmMaxGain" Style="{StaticResource EffectSlider}" Minimum="100" Maximum="400"
+                                                                    TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="OnApex6PcmMaxGainChanged" Margin="0,4,0,0"/>
+                                                        </StackPanel>
+                                                    </Border>
+
                                                     <!-- Linear Gain Slider & Numeric (when linear mode) -->
                                                     <Border x:Name="RowApex6PcmLinear" Style="{StaticResource SettingRow}" Margin="0,2,0,4" Visibility="Collapsed">
                                                         <StackPanel>
@@ -770,6 +782,8 @@
                                                         <TextBlock Text="{DynamicResource Loc_Apex6PcmEffectiveGain}" Style="{StaticResource RowLabel}"/>
                                                         <TextBlock x:Name="TxtApex6PcmEffectiveGain" Style="{StaticResource ValueLabel}" DockPanel.Dock="Right" Foreground="#10B981" FontWeight="Bold"/>
                                                     </DockPanel>
+
+                                                    <TextBlock x:Name="TxtApex6PcmControlStatus" Text="Active engine PCM: Disconnected" TextWrapping="Wrap" FontSize="11" Margin="4,0,4,8" Foreground="{DynamicResource TextMuted}"/>
 
                                                     <!-- Measurement Wizard Buttons & Reset -->
                                                     <Grid Margin="0,2,0,6">

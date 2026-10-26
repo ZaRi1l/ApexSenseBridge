@@ -103,11 +103,12 @@ Apex6HapticBridge::Apex6HapticBridge(flydigi::Apex5Device& device,
                                      bool routeGrips, unsigned triggerStrengthPercent,
                                      unsigned vibrationStrengthPercent,
                                      Apex6PcmConfig pcmConfig,
-                                     std::string_view sessionToken)
+                                     std::string_view sessionToken, std::string_view gameKey)
     : device_(device), hapticProcessor_(apex6HapticConfig(config)), routeGrips_(routeGrips),
       triggerStrengthPercent_(triggerStrengthPercent), vibrationStrengthPercent_(vibrationStrengthPercent),
       pcmGainPercent_(pcmConfig.mode == Apex6PcmMode::Companding ? std::clamp(pcmConfig.legacyGainPercent, 100U, 200U) : 100U),
-      pcmScaler_(pcmConfig), liveServer_(sessionToken) {}
+      pcmScaler_(pcmConfig), liveServer_(sessionToken), controlServer_(sessionToken, gameKey),
+      pcmStatsConfig_(pcmConfig), pcmStatsState_(pcmScaler_.state()) {}
 
 Apex6HapticBridge::Apex6HapticBridge(flydigi::Apex5Device& device,
                                      haptics::HapticConfig config,
@@ -418,6 +419,15 @@ flydigi::apex6::MotorBlock Apex6HapticBridge::renderBlock(
     flydigi::apex6::TriggerRoute& route,
     bool& triggerEnabled,
     Clock::time_point now) noexcept {
+    controlServer_.applyPending([this](const Apex6PcmConfig& config) noexcept {
+        std::unique_lock lock(pcmStatsMutex_, std::try_to_lock);
+        if (!lock.owns_lock()) return false;
+        pcmScaler_ = Apex6PcmScaler(config);
+        pcmGainPercent_ = config.mode == Apex6PcmMode::Companding ? config.legacyGainPercent : 100;
+        pcmStatsConfig_ = pcmScaler_.config();
+        pcmStatsState_ = pcmScaler_.state();
+        return true;
+    });
     flydigi::apex6::MotorBlock output{};
     std::array<std::int8_t, 8> leftTrigger;
     std::array<std::int8_t, 8> rightTrigger;
@@ -767,15 +777,18 @@ Apex6HapticBridgeStats Apex6HapticBridge::stats() const noexcept {
     result.waveformMaximumAgeUs = waveformMaximumAgeUs_.load(std::memory_order_relaxed);
     result.waveformTotalAgeUs = waveformTotalAgeUs_.load(std::memory_order_relaxed);
     result.waveformActiveRendered = waveformActiveRendered_.load(std::memory_order_relaxed);
-    result.pcmGainPercent = pcmGainPercent_;
-    result.pcmMode = pcmScaler_.config().mode;
-    result.pcmReferencePercent = pcmScaler_.config().referencePercent;
-    result.pcmReferencePeakAbs16 = pcmScaler_.config().referencePeakAbs16;
-    result.pcmTargetPercent = pcmScaler_.config().targetPercent;
-    result.pcmRequestedGainRatio = pcmScaler_.state().requestedGainRatio;
-    result.pcmEffectiveGainRatio = pcmScaler_.state().effectiveGainRatio;
-    result.pcmGainLimited = pcmScaler_.state().gainLimited;
-    result.pcmMeasurementStatus = pcmScaler_.state().status;
+    {
+        std::lock_guard lock(pcmStatsMutex_);
+        result.pcmGainPercent = pcmGainPercent_;
+        result.pcmMode = pcmStatsConfig_.mode;
+        result.pcmReferencePercent = pcmStatsConfig_.referencePercent;
+        result.pcmReferencePeakAbs16 = pcmStatsConfig_.referencePeakAbs16;
+        result.pcmTargetPercent = pcmStatsConfig_.targetPercent;
+        result.pcmRequestedGainRatio = pcmStatsState_.requestedGainRatio;
+        result.pcmEffectiveGainRatio = pcmStatsState_.effectiveGainRatio;
+        result.pcmGainLimited = pcmStatsState_.gainLimited;
+        result.pcmMeasurementStatus = pcmStatsState_.status;
+    }
     result.pcmOutputClippedSamples = pcmOutputClippedSamples_.load(std::memory_order_relaxed);
     result.pcmProcessedSamples = pcmProcessedSamples_.load(std::memory_order_relaxed);
     result.pcmOutputLeftPeak = pcmOutputLeftPeak_.load(std::memory_order_relaxed);
