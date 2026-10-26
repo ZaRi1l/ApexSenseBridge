@@ -398,5 +398,11 @@
   "Loc_Apex6PcmMeasuring": "1kHz PCM 측정 중… 게임에서 진동 장면을 플레이하세요",
   "Loc_Apex6PcmNextSessionHint": "* 설정은 다음 게임/브리지 실행 시 반영됩니다.",
   "Loc_Apex6PcmNotMeasured": "측정 기록 없음 (원본 100% 유지)",
-  "Loc_Apex6PcmObservedInfo": "관측치 좌: {0}% / 우: {1}% (최고: {2}%)"
+  "Loc_Apex6PcmObservedInfo": "관측치 좌: {0}% / 우: {1}% (최고: {2}%)",
+  "Loc_Apex6PcmObservedInfoWithRaw": "관측된 1kHz 좌:{0}% / 우:{1}% (피크: {2}%) | 48kHz 원본: {3}%",
+  "Loc_Apex6PcmRawUnavailable": "48kHz 원본: 측정 불가",
+  "Loc_Apex6PcmGlobalNormalizeHint": "각 게임에서 측정된 기준 피크를 사용하여 이 목표 진폭까지 선형 비례 증폭합니다.",
+  "Loc_Apex6PcmManualRefHint": "기준 피크 진폭을 직접 입력하세요 (1~32768, 예: 10028은 약 30.6%)",
+  "Loc_Apex6PcmReset": "초기화",
+  "Loc_Apex6PcmResetHint": "이 게임의 PCM 캘리브레이션을 초기화하고 전역 설정을 복원합니다"
 }

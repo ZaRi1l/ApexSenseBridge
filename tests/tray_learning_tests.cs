@@ -751,17 +751,29 @@ internal static class TrayLearningTests
         restoredZzz.UseGlobal = true;
         restoredZzz.MeasuredReferencePeakAbs16 = 10028;
         restored.GetApex6PcmGlobal().Mode = "normalize";
-        Assert(restored.BuildApex6PcmArguments("zenless-zone-zero").Contains("--apex6-pcm-reference-peak-abs16 10028"),
-            "Global normalization lost the game's exact measured peak.");
+        restored.GetApex6PcmGlobal().TargetPeakPercent = 85;
+        restored.GetApex6PcmGlobal().MaxGainPercent = 350;
+        Assert(restored.BuildApex6PcmArguments("zenless-zone-zero") ==
+               " --apex6-pcm-mode normalize --apex6-pcm-reference-peak-abs16 10028 --apex6-pcm-target-percent 85 --apex6-pcm-max-gain-percent 350",
+               "Global normalize custom target and max gain failed.");
         Assert(restored.BuildApex6PcmArguments("pragmata") == string.Empty,
             "Measured reference leaked to an unmeasured game.");
+
+        var roundtrip = serializer.Deserialize<TraySettings>(serializer.Serialize(restored));
+        Assert(roundtrip.GetApex6PcmGameSettings("zenless-zone-zero").MeasuredReferencePeakAbs16 == 10028,
+            "Exact measured peak changed during serialization.");
+
+        // Reset game calibration
+        restored.SetApex6PcmGameSettings("zenless-zone-zero", null);
+        Assert(restored.GetApex6PcmGameSettings("zenless-zone-zero") == null,
+            "Resetting game settings failed.");
+        Assert(restored.BuildApex6PcmArguments("zenless-zone-zero") == string.Empty,
+            "Reset game did not fall back to unmeasured default.");
+
         restored.GetApex6PcmGlobal().Mode = "companding";
         restored.GetApex6PcmGlobal().CompandingGainPercent = 175;
         Assert(restored.BuildApex6PcmArguments("zenless-zone-zero").Contains("--apex6-pcm-companding-gain-percent 175"),
             "Global companding gain was not forwarded.");
-        var roundtrip = serializer.Deserialize<TraySettings>(serializer.Serialize(restored));
-        Assert(roundtrip.GetApex6PcmGameSettings("zenless-zone-zero").MeasuredReferencePeakAbs16 == 10028,
-            "Exact measured peak changed during serialization.");
 
         // Legacy JSON migration without PCM fields
         var legacy = serializer.Deserialize<TraySettings>("{\"AutoDetectGames\":true}");

@@ -490,6 +490,18 @@ if(BUILD_TESTING)
         add_test(NAME hid_transport_windows
                  COMMAND ApexSenseBridgeHidTransportWindowsTests)
 
+        add_executable(ApexSenseBridgePcmHeaderStandaloneTests
+            tests/test_pcm_header_standalone.cpp
+        )
+        target_include_directories(ApexSenseBridgePcmHeaderStandaloneTests PRIVATE src)
+        if(MSVC)
+            target_compile_options(ApexSenseBridgePcmHeaderStandaloneTests PRIVATE /W4 /permissive- /EHsc)
+        else()
+            target_compile_options(ApexSenseBridgePcmHeaderStandaloneTests PRIVATE -Wall -Wextra -Wpedantic)
+        endif()
+        add_test(NAME pcm_header_standalone
+                 COMMAND ApexSenseBridgePcmHeaderStandaloneTests)
+
         add_test(NAME installer_registry_contract
                  COMMAND powershell -NoProfile -NonInteractive
                          -ExecutionPolicy Bypass

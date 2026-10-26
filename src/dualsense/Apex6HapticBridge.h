@@ -174,6 +174,9 @@ private:
         std::uint32_t sequence = 0;
         std::array<std::int16_t, 8> left{};
         std::array<std::int16_t, 8> right{};
+        std::uint16_t rawHapticLeftPeak = 0;
+        std::uint16_t rawHapticRightPeak = 0;
+        bool hasRawMeasurements = false;
         Clock::time_point receivedAt{};
     };
 

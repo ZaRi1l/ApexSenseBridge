@@ -202,6 +202,9 @@ void Apex6HapticBridge::handle(const DualSenseFeedback& feedback) {
         WaveformBlock block{feedback.audioSequence,
                             feedback.leftHapticSamples,
                             feedback.rightHapticSamples,
+                            feedback.hasRawAudioMeasurements ? feedback.rawAudioPeaks[2] : static_cast<std::uint16_t>(0),
+                            feedback.hasRawAudioMeasurements ? feedback.rawAudioPeaks[3] : static_cast<std::uint16_t>(0),
+                            feedback.hasRawAudioMeasurements,
                             Clock::now()};
         auto leftPeak = 0U;
         auto rightPeak = 0U;
@@ -555,10 +558,11 @@ flydigi::apex6::MotorBlock Apex6HapticBridge::renderBlock(
     }
     if (routeGrips_ && leftPcmActive) updateMaximum(pcmOutputLeftPeak_, leftPcmOutputPeak);
     if (routeGrips_ && rightPcmActive) updateMaximum(pcmOutputRightPeak_, rightPcmOutputPeak);
+    const auto blockRawL = waveform && waveform->hasRawMeasurements ? waveform->rawHapticLeftPeak : static_cast<std::uint16_t>(0);
+    const auto blockRawR = waveform && waveform->hasRawMeasurements ? waveform->rawHapticRightPeak : static_cast<std::uint16_t>(0);
     liveServer_.updateLive(
         currentLeftPeak16, currentRightPeak16,
-        static_cast<std::uint16_t>(rawAudioPeaks_[2].load(std::memory_order_relaxed)),
-        static_cast<std::uint16_t>(rawAudioPeaks_[3].load(std::memory_order_relaxed)),
+        blockRawL, blockRawR,
         static_cast<std::uint8_t>(leftPcmOutputPeak),
         static_cast<std::uint8_t>(rightPcmOutputPeak),
         static_cast<std::uint8_t>(pcmAudioChannels_.load(std::memory_order_relaxed)),

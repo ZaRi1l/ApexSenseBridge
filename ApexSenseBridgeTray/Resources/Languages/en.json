@@ -398,5 +398,11 @@
   "Loc_Apex6PcmMeasuring": "Measuring 1kHz PCM… Play sample haptic actions in game",
   "Loc_Apex6PcmNextSessionHint": "* Normalization takes effect on the next game/bridge launch.",
   "Loc_Apex6PcmNotMeasured": "Not measured (using original PCM)",
-  "Loc_Apex6PcmObservedInfo": "Observed L: {0}% / R: {1}% (Peak: {2}%)"
+  "Loc_Apex6PcmObservedInfo": "Observed L: {0}% / R: {1}% (Peak: {2}%)",
+  "Loc_Apex6PcmObservedInfoWithRaw": "Observed 1kHz L:{0}% / R:{1}% (Peak: {2}%) | 48kHz raw: {3}%",
+  "Loc_Apex6PcmRawUnavailable": "48kHz raw: unavailable",
+  "Loc_Apex6PcmGlobalNormalizeHint": "Each game uses its measured reference peak, scaled to this target amplitude.",
+  "Loc_Apex6PcmManualRefHint": "Enter amplitude peak manually (1..32768, e.g. 10028 for ~30.6%)",
+  "Loc_Apex6PcmReset": "Reset",
+  "Loc_Apex6PcmResetHint": "Reset this game's PCM calibration and restore global settings"
 }

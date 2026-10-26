@@ -2505,17 +2505,22 @@ namespace ApexSenseBridgeTray
                 {
                     PnlGlobalApex6PcmLinear.Visibility = global.Mode == "linear" ? Visibility.Visible : Visibility.Collapsed;
                 }
-                PnlGlobalApex6PcmCompanding.Visibility = global.Mode == "companding" ? Visibility.Visible : Visibility.Collapsed;
-                SliderGlobalApex6PcmCompanding.Value = global.CompandingGainPercent;
-                TxtBoxGlobalApex6PcmCompanding.Text = global.CompandingGainPercent.ToString(CultureInfo.InvariantCulture);
-                if (SliderGlobalApex6PcmLinear != null)
+                if (PnlGlobalApex6PcmCompanding != null)
                 {
-                    SliderGlobalApex6PcmLinear.Value = global.LinearGainPercent;
+                    PnlGlobalApex6PcmCompanding.Visibility = global.Mode == "companding" ? Visibility.Visible : Visibility.Collapsed;
                 }
-                if (TxtBoxGlobalApex6PcmLinear != null)
+                if (PnlGlobalApex6PcmNormalize != null)
                 {
-                    TxtBoxGlobalApex6PcmLinear.Text = global.LinearGainPercent.ToString(CultureInfo.InvariantCulture);
+                    PnlGlobalApex6PcmNormalize.Visibility = global.Mode == "normalize" ? Visibility.Visible : Visibility.Collapsed;
                 }
+                if (SliderGlobalApex6PcmCompanding != null) SliderGlobalApex6PcmCompanding.Value = global.CompandingGainPercent;
+                if (TxtBoxGlobalApex6PcmCompanding != null) TxtBoxGlobalApex6PcmCompanding.Text = global.CompandingGainPercent.ToString(CultureInfo.InvariantCulture);
+                if (SliderGlobalApex6PcmLinear != null) SliderGlobalApex6PcmLinear.Value = global.LinearGainPercent;
+                if (TxtBoxGlobalApex6PcmLinear != null) TxtBoxGlobalApex6PcmLinear.Text = global.LinearGainPercent.ToString(CultureInfo.InvariantCulture);
+                if (SliderGlobalApex6PcmTarget != null) SliderGlobalApex6PcmTarget.Value = global.TargetPeakPercent;
+                if (TxtBoxGlobalApex6PcmTarget != null) TxtBoxGlobalApex6PcmTarget.Text = global.TargetPeakPercent.ToString(CultureInfo.InvariantCulture);
+                if (SliderGlobalApex6PcmMaxGain != null) SliderGlobalApex6PcmMaxGain.Value = global.MaxGainPercent;
+                if (TxtBoxGlobalApex6PcmMaxGain != null) TxtBoxGlobalApex6PcmMaxGain.Text = global.MaxGainPercent.ToString(CultureInfo.InvariantCulture);
             }
             finally
             {
@@ -2531,10 +2536,17 @@ namespace ApexSenseBridgeTray
             var global = settings.GetApex6PcmGlobal();
             global.Mode = (item.Tag as string) ?? "original";
             settings.Save();
-            PnlGlobalApex6PcmCompanding.Visibility = global.Mode == "companding" ? Visibility.Visible : Visibility.Collapsed;
+            if (PnlGlobalApex6PcmCompanding != null)
+            {
+                PnlGlobalApex6PcmCompanding.Visibility = global.Mode == "companding" ? Visibility.Visible : Visibility.Collapsed;
+            }
             if (PnlGlobalApex6PcmLinear != null)
             {
                 PnlGlobalApex6PcmLinear.Visibility = global.Mode == "linear" ? Visibility.Visible : Visibility.Collapsed;
+            }
+            if (PnlGlobalApex6PcmNormalize != null)
+            {
+                PnlGlobalApex6PcmNormalize.Visibility = global.Mode == "normalize" ? Visibility.Visible : Visibility.Collapsed;
             }
         }
 
@@ -2549,6 +2561,31 @@ namespace ApexSenseBridgeTray
             }
             settings.Save();
         }
+
+        private void OnGlobalApex6PcmTargetChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (updatingEffectSettings || settings == null) return;
+            var global = settings.GetApex6PcmGlobal();
+            global.TargetPeakPercent = (int)SliderGlobalApex6PcmTarget.Value;
+            if (TxtBoxGlobalApex6PcmTarget != null)
+                TxtBoxGlobalApex6PcmTarget.Text = global.TargetPeakPercent.ToString(CultureInfo.InvariantCulture);
+            settings.Save();
+        }
+
+        private void OnGlobalApex6PcmMaxGainChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (updatingEffectSettings || settings == null) return;
+            var global = settings.GetApex6PcmGlobal();
+            global.MaxGainPercent = (int)SliderGlobalApex6PcmMaxGain.Value;
+            if (TxtBoxGlobalApex6PcmMaxGain != null)
+                TxtBoxGlobalApex6PcmMaxGain.Text = global.MaxGainPercent.ToString(CultureInfo.InvariantCulture);
+            settings.Save();
+        }
+
+        private void OnGlobalApex6PcmTargetTextLostFocus(object s, RoutedEventArgs e) { CommitPcmNumber(TxtBoxGlobalApex6PcmTarget, SliderGlobalApex6PcmTarget); }
+        private void OnGlobalApex6PcmMaxGainTextLostFocus(object s, RoutedEventArgs e) { CommitPcmNumber(TxtBoxGlobalApex6PcmMaxGain, SliderGlobalApex6PcmMaxGain); }
+        private void OnGlobalApex6PcmTargetTextKeyDown(object s, KeyEventArgs e) { if (e.Key == Key.Enter) { OnGlobalApex6PcmTargetTextLostFocus(s, e); e.Handled = true; } }
+        private void OnGlobalApex6PcmMaxGainTextKeyDown(object s, KeyEventArgs e) { if (e.Key == Key.Enter) { OnGlobalApex6PcmMaxGainTextLostFocus(s, e); e.Handled = true; } }
 
         private void UpdateApex6PcmDetailPane()
         {
@@ -2586,13 +2623,18 @@ namespace ApexSenseBridgeTray
                 }
 
                 int refPeak = gameSettings != null ? gameSettings.MeasuredReferencePeakAbs16 : 0;
-                double refPct = refPeak > 0 ? refPeak / 327.67 : gameSettings != null ? gameSettings.MeasuredReferencePercent : 0;
+                double refPct = refPeak > 0 ? refPeak / 327.67 : (gameSettings != null ? gameSettings.MeasuredReferencePercent : 0);
+
+                if (TxtBoxApex6PcmManualRef != null)
+                {
+                    TxtBoxApex6PcmManualRef.Text = refPeak > 0 ? refPeak.ToString(CultureInfo.InvariantCulture) : string.Empty;
+                }
 
                 if (TxtApex6PcmReference != null)
                 {
                     if (refPct > 0)
                     {
-                        TxtApex6PcmReference.Text = string.Format("{0}% ({1})", refPct, refPeak > 0 ? refPeak.ToString() : "~");
+                        TxtApex6PcmReference.Text = string.Format("{0:F1}% ({1})", refPct, refPeak > 0 ? refPeak.ToString() : "~");
                         if (TxtApex6PcmMeasuredDetail != null)
                         {
                             if (gameSettings != null && gameSettings.ObservedActiveBlocks > 0)
@@ -2600,7 +2642,7 @@ namespace ApexSenseBridgeTray
                                 TxtApex6PcmMeasuredDetail.Text = string.Format(LocalizationManager.Get("Loc_Apex6PcmObservedInfo"),
                                     Math.Round(gameSettings.ObservedLeftPeakAbs16 / 327.67, 1),
                                     Math.Round(gameSettings.ObservedRightPeakAbs16 / 327.67, 1),
-                                    refPct);
+                                    Math.Round(refPct, 1));
                             }
                             else
                             {
@@ -2873,25 +2915,42 @@ namespace ApexSenseBridgeTray
                     ushort left16 = pcmLiveAccessor.ReadUInt16(32);
                     ushort right16 = pcmLiveAccessor.ReadUInt16(34);
                     ushort max16 = pcmLiveAccessor.ReadUInt16(36);
+                    ushort rawPeak16 = pcmLiveAccessor.ReadUInt16(38);
                     uint blocks = pcmLiveAccessor.ReadUInt32(40);
 
                     double maxPct = max16 / 327.67;
+                    double rawPct = rawPeak16 / 327.67;
                     if (max16 > 0)
                     {
                         if (TxtApex6PcmReference != null)
-                            TxtApex6PcmReference.Text = string.Format("{0}% ({1})", maxPct, max16);
+                            TxtApex6PcmReference.Text = string.Format("{0:F1}% ({1})", maxPct, max16);
+                        if (TxtBoxApex6PcmManualRef != null)
+                            TxtBoxApex6PcmManualRef.Text = max16.ToString(CultureInfo.InvariantCulture);
                         if (TxtApex6PcmMeasuredDetail != null)
                         {
-                            TxtApex6PcmMeasuredDetail.Text = string.Format(LocalizationManager.Get("Loc_Apex6PcmObservedInfo"),
-                                Math.Round(left16 / 327.67, 1),
-                                Math.Round(right16 / 327.67, 1),
-                                maxPct);
+                            if (rawPeak16 > 0)
+                            {
+                                TxtApex6PcmMeasuredDetail.Text = string.Format(
+                                    LocalizationManager.Get("Loc_Apex6PcmObservedInfoWithRaw"),
+                                    Math.Round(left16 / 327.67, 1),
+                                    Math.Round(right16 / 327.67, 1),
+                                    Math.Round(maxPct, 1),
+                                    Math.Round(rawPct, 1));
+                            }
+                            else
+                            {
+                                TxtApex6PcmMeasuredDetail.Text = string.Format(
+                                    LocalizationManager.Get("Loc_Apex6PcmObservedInfo"),
+                                    Math.Round(left16 / 327.67, 1),
+                                    Math.Round(right16 / 327.67, 1),
+                                    Math.Round(maxPct, 1)) + " (" + LocalizationManager.Get("Loc_Apex6PcmRawUnavailable") + ")";
+                            }
                         }
                         UpdateApex6PcmEffectiveGainDisplay("normalize", maxPct, (int)SliderApex6PcmTarget.Value, (int)SliderApex6PcmLinear.Value);
                     }
 
                     if (TxtApex6PcmLiveStatus != null)
-                        TxtApex6PcmLiveStatus.Text = string.Format("Measurement complete: {0} blocks, Peak: {1}%", blocks, maxPct);
+                        TxtApex6PcmLiveStatus.Text = string.Format("Measurement complete: {0} blocks, Peak: {1:F1}%", blocks, maxPct);
                 }
                 catch { }
             }
@@ -2909,19 +2968,32 @@ namespace ApexSenseBridgeTray
             {
                 ushort curL = pcmLiveAccessor.ReadUInt16(16);
                 ushort curR = pcmLiveAccessor.ReadUInt16(18);
+                ushort curRawL = pcmLiveAccessor.ReadUInt16(20);
+                ushort curRawR = pcmLiveAccessor.ReadUInt16(22);
                 ushort maxPeak = pcmLiveAccessor.ReadUInt16(36);
+                ushort rawMaxPeak = pcmLiveAccessor.ReadUInt16(38);
 
                 double pctL = Math.Min(100.0, curL / 327.67);
                 double pctR = Math.Min(100.0, curR / 327.67);
                 if (PrgApex6PcmLiveL != null) PrgApex6PcmLiveL.Value = pctL;
                 if (PrgApex6PcmLiveR != null) PrgApex6PcmLiveR.Value = pctR;
 
-                int maxPct = (int)Math.Round(maxPeak / 327.67);
+                double maxPct = maxPeak / 327.67;
+                double rawMaxPct = rawMaxPeak / 327.67;
                 if (TxtApex6PcmLiveStatus != null)
                 {
-                    TxtApex6PcmLiveStatus.Text = string.Format(
-                        "Measuring... Current L:{0:F0}% R:{1:F0}% | Peak: {2}%",
-                        pctL, pctR, maxPct);
+                    if (rawMaxPeak > 0)
+                    {
+                        TxtApex6PcmLiveStatus.Text = string.Format(
+                            "Measuring... 1kHz Peak: {0:F1}% | 48kHz Raw: {1:F1}%",
+                            maxPct, rawMaxPct);
+                    }
+                    else
+                    {
+                        TxtApex6PcmLiveStatus.Text = string.Format(
+                            "Measuring... 1kHz Peak: {0:F1}% ({1})",
+                            maxPct, maxPeak);
+                    }
                 }
             }
             catch { }
@@ -2946,6 +3018,7 @@ namespace ApexSenseBridgeTray
                     ushort left16 = pcmLiveAccessor.ReadUInt16(32);
                     ushort right16 = pcmLiveAccessor.ReadUInt16(34);
                     ushort max16 = pcmLiveAccessor.ReadUInt16(36);
+                    ushort rawPeak16 = pcmLiveAccessor.ReadUInt16(38);
                     uint blocks = pcmLiveAccessor.ReadUInt32(40);
 
                     if (max16 == 0 || blocks == 0 || pcmLiveAccessor.ReadByte(27) != 1)
@@ -2972,6 +3045,54 @@ namespace ApexSenseBridgeTray
             settings.SetApex6PcmGameSettings(game.Normalized, gameSettings);
             settings.Save();
 
+            UpdateApex6PcmDetailPane();
+        }
+
+        private void OnApex6PcmManualRefLostFocus(object sender, RoutedEventArgs e)
+        {
+            if (SelectedGame == null || settings == null || TxtBoxApex6PcmManualRef == null) return;
+            string text = TxtBoxApex6PcmManualRef.Text.Trim();
+            if (string.IsNullOrEmpty(text)) return;
+            int amp = 0;
+            double numVal;
+            if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out numVal))
+            {
+                if (numVal <= 100.0)
+                {
+                    amp = (int)Math.Round(numVal * 327.67);
+                }
+                else
+                {
+                    amp = (int)Math.Min(32768, Math.Max(1, Math.Round(numVal)));
+                }
+            }
+            if (amp > 0)
+            {
+                var gameSettings = settings.GetApex6PcmGameSettings(SelectedGame.Normalized) ?? new Apex6PcmGameSettings();
+                gameSettings.MeasuredReferencePeakAbs16 = amp;
+                gameSettings.MeasuredReferencePercent = amp / 327.67;
+                gameSettings.ObservedStatus = "manual";
+                settings.SetApex6PcmGameSettings(SelectedGame.Normalized, gameSettings);
+                settings.Save();
+                UpdateApex6PcmDetailPane();
+            }
+        }
+
+        private void OnApex6PcmManualRefKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                OnApex6PcmManualRefLostFocus(sender, e);
+                e.Handled = true;
+            }
+        }
+
+        private void OnApex6PcmResetClick(object sender, RoutedEventArgs e)
+        {
+            if (SelectedGame == null || settings == null) return;
+            DisconnectPcmMeasurement();
+            settings.SetApex6PcmGameSettings(SelectedGame.Normalized, null);
+            settings.Save();
             UpdateApex6PcmDetailPane();
         }
 
