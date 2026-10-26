@@ -48,11 +48,11 @@ struct Apex6PcmLiveBlock {
 static_assert(sizeof(Apex6PcmLiveBlock) == 68);
 
 #ifdef _WIN32
-// Every access, including client commands and copies, holds this session mutex.
+// Non-blocking try-lock for real-time audio render thread; blocking with timeout for client.
 class Apex6PcmLock {
 public:
-    explicit Apex6PcmLock(HANDLE mutex) noexcept : mutex_(mutex) {
-        const auto result = mutex ? WaitForSingleObject(mutex, INFINITE) : WAIT_FAILED;
+    explicit Apex6PcmLock(HANDLE mutex, DWORD timeoutMs = INFINITE) noexcept : mutex_(mutex) {
+        const auto result = mutex ? WaitForSingleObject(mutex, timeoutMs) : WAIT_FAILED;
         acquired_ = result == WAIT_OBJECT_0; // Abandoned data is not trusted.
         if (result == WAIT_ABANDONED) ReleaseMutex(mutex);
     }
@@ -108,8 +108,32 @@ public:
                     std::uint64_t totalProcessedSamples,
                     std::uint64_t totalClippedSamples) noexcept {
 #ifdef _WIN32
-        Apex6PcmLock lock(mutex_);
-        if (!lock || view_ == nullptr) return;
+        // Non-blocking try-lock (timeout 0ms): audio render thread never stalls on IPC
+        Apex6PcmLock lock(mutex_, 0);
+        if (!lock || view_ == nullptr) {
+            deferredLeftPeak_ = (std::max)(deferredLeftPeak_, left16);
+            deferredRightPeak_ = (std::max)(deferredRightPeak_, right16);
+            deferredRawLeftPeak_ = (std::max)(deferredRawLeftPeak_, rawLeft16);
+            deferredRawRightPeak_ = (std::max)(deferredRawRightPeak_, rawRight16);
+            hasDeferredPeaks_ = true;
+            return;
+        }
+
+        std::uint16_t effLeft16 = left16;
+        std::uint16_t effRight16 = right16;
+        std::uint16_t effRawLeft16 = rawLeft16;
+        std::uint16_t effRawRight16 = rawRight16;
+        if (hasDeferredPeaks_) {
+            effLeft16 = (std::max)(effLeft16, deferredLeftPeak_);
+            effRight16 = (std::max)(effRight16, deferredRightPeak_);
+            effRawLeft16 = (std::max)(effRawLeft16, deferredRawLeftPeak_);
+            effRawRight16 = (std::max)(effRawRight16, deferredRawRightPeak_);
+            deferredLeftPeak_ = 0;
+            deferredRightPeak_ = 0;
+            deferredRawLeftPeak_ = 0;
+            deferredRawRightPeak_ = 0;
+            hasDeferredPeaks_ = false;
+        }
 
         view_->currentLeftPeak16 = left16;
         view_->currentRightPeak16 = right16;
@@ -141,15 +165,15 @@ public:
                 measurementStartedTicks_ = GetTickCount64();
             }
 
-            if (left16 > view_->measuredLeftPeak16) view_->measuredLeftPeak16 = left16;
-            if (right16 > view_->measuredRightPeak16) view_->measuredRightPeak16 = right16;
-            const auto maxPeak = (std::max)(left16, right16);
+            if (effLeft16 > view_->measuredLeftPeak16) view_->measuredLeftPeak16 = effLeft16;
+            if (effRight16 > view_->measuredRightPeak16) view_->measuredRightPeak16 = effRight16;
+            const auto maxPeak = (std::max)(effLeft16, effRight16);
             if (maxPeak > view_->measuredMaxPeak16) view_->measuredMaxPeak16 = maxPeak;
 
-            const auto rawMax = (std::max)(rawLeft16, rawRight16);
+            const auto rawMax = (std::max)(effRawLeft16, effRawRight16);
             if (rawMax > view_->rawMeasuredHapticPeak16) view_->rawMeasuredHapticPeak16 = rawMax;
 
-            if (left16 > 0 || right16 > 0) {
+            if (effLeft16 > 0 || effRight16 > 0) {
                 view_->measuredActiveBlocks++;
             } else if (totalProcessedSamples > previousProcessedSamples_) {
                 view_->measuredSilentBlocks++;
@@ -197,6 +221,11 @@ private:
     std::uint64_t initialActiveDrops_ = 0;
     std::uint64_t initialProcessedSamples_ = 0;
     std::uint64_t initialClippedSamples_ = 0;
+    std::uint16_t deferredLeftPeak_ = 0;
+    std::uint16_t deferredRightPeak_ = 0;
+    std::uint16_t deferredRawLeftPeak_ = 0;
+    std::uint16_t deferredRawRightPeak_ = 0;
+    bool hasDeferredPeaks_ = false;
 #endif
 };
 

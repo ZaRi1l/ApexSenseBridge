@@ -65,15 +65,22 @@ The Windows CTest suite now registers `pcm_header_standalone` (explicitly built
 with `NDEBUG`) and `pcm_check_release_failure` (checks CHECK(false) exits with a
 failure). The concurrent test requires 500 acknowledged start/stop cycles, at
 least 20 rendered blocks per measurement and **at least 10,000 actual render
-updates**, with a 30-second CTest timeout. Existing assert-based native suites
-explicitly undefine NDEBUG at their test target only; production builds are unchanged.
+updates**, with a 30-second CTest timeout.
+**Important:** this 10,000-update test is an IPC shared-memory stress test of
+`updateLive()`; it does **not** test the hardware audio playback of `renderBlock()`
+or physical actuator duty. Existing assert-based native suites explicitly undefine
+NDEBUG at their test target only; production builds are unchanged.
 
-PCM IPC version 2 uses a session-specific named mutex for every command and
-snapshot. Stop and the final copy occur in the same critical section; Save uses
-that frozen copy, never a fresh mixture of live fields. Engine and Tray must be
-rebuilt together; version 1 mappings are rejected. This is blocking synchronization:
-UI copies must remain short, with no file writes/UI updates under the lock. Render
-latency under contention remains a Windows/hardware verification requirement.
+PCM IPC version 2 uses a session-specific named mutex for command and snapshot
+isolation. To guarantee real-time audio safety and prevent haptic jitter or deadline
+misses, the audio render thread accesses IPC via a **non-blocking try-lock**
+(`WaitForSingleObject(mutex, 0)`). If the client holds the lock to read a snapshot,
+the audio thread never waits: it folds any peak amplitudes into internal deferred
+storage and commits them on the next cycle. Because drop, clip, and processed-sample
+counters are monotonic cumulative totals, zero counts are lost even under contention.
+On the UI side, Stop and final snapshot copy occur under the mutex, and Save uses
+that frozen snapshot only. Engine and Tray must be rebuilt together; version 1
+mappings are rejected.
 
 Manual peak entry has explicit `%` and `abs16` units. `1 abs16` means one sample
 unit, not 1 percent; 0 clears the reference and preserves Original fallback.

@@ -36,6 +36,11 @@ private:
     asb::platform::Apex6PcmLiveBlock* view{};
 };
 
+// NOTE: testPcmLiveConcurrency is an IPC shared-memory stress test for
+// Apex6PcmLiveServer::updateLive() ensuring non-blocking execution, race-free
+// snapshot capture, and zero deadlocks across 10,000+ render updates.
+// It is NOT a verification of the hardware Apex6HapticBridge::renderBlock()
+// audio rendering or physical motor behavior.
 void testPcmLiveConcurrency() {
     const auto token = std::to_string(GetCurrentProcessId()) + "-concurrency";
     asb::platform::Apex6PcmLiveServer server(token);
