@@ -32,7 +32,8 @@ class PcmWpfContracts(unittest.TestCase):
         self.assertIn('using (new PcmGuard(pcmLiveMutex))', cs)
         self.assertIn('Apex6PcmLock lock(mutex_)', cpp)
         self.assertIn('version = 2', cpp)
-        self.assertIn('ReadUInt32(4) == 2', cs)
+        self.assertIn('ReadUInt32(4) == PcmLiveVersion', cs)
+        self.assertIn('PcmLiveBlockSize = 76', cs)
 
     def test_release_checks_remain_enabled(self):
         cmake = (ROOT / 'CMakeLists.txt').read_text()

@@ -2471,6 +2471,10 @@ namespace ApexSenseBridgeTray
             public void Dispose() { mutex.ReleaseMutex(); }
         }
 
+        private const int PcmLiveBlockSize = 76;
+        private const uint PcmLiveMagic = 0x50365041;
+        private const uint PcmLiveVersion = 2;
+
         private bool PcmSessionMatches()
         {
             return sessionManager != null && SelectedGame != null &&
@@ -2897,7 +2901,7 @@ namespace ApexSenseBridgeTray
                             "Local\\ApexSenseBridge.Session." + pcmMeasurementToken + ".Apex6Pcm",
                             System.IO.MemoryMappedFiles.MemoryMappedFileRights.ReadWrite);
                         pcmLiveAccessor = pcmLiveMapping.CreateViewAccessor(
-                            0, 68, System.IO.MemoryMappedFiles.MemoryMappedFileAccess.ReadWrite);
+                            0, PcmLiveBlockSize, System.IO.MemoryMappedFiles.MemoryMappedFileAccess.ReadWrite);
                     }
                 }
                 catch
@@ -2916,7 +2920,9 @@ namespace ApexSenseBridgeTray
                     {
                         using (new PcmGuard(pcmLiveMutex))
                         {
-                            compatible = pcmLiveAccessor.ReadUInt32(0) == 0x50365041 && pcmLiveAccessor.ReadUInt32(4) == 2;
+                            compatible = pcmLiveAccessor.Capacity >= PcmLiveBlockSize &&
+                                         pcmLiveAccessor.ReadUInt32(0) == PcmLiveMagic &&
+                                         pcmLiveAccessor.ReadUInt32(4) == PcmLiveVersion;
                             if (compatible)
                             {
                                 activeMeasurementGen = unchecked(pcmLiveAccessor.ReadUInt32(12) + 1);
@@ -2932,7 +2938,13 @@ namespace ApexSenseBridgeTray
                         TxtApex6PcmLiveStatus.Text = ex.Message;
                         return;
                     }
-                    if (!compatible) { DisconnectPcmMeasurement(); return; }
+                    if (!compatible)
+                    {
+                        DisconnectPcmMeasurement();
+                        if (TxtApex6PcmLiveStatus != null)
+                            TxtApex6PcmLiveStatus.Text = "IPC version/size mismatch. Please restart bridge.";
+                        return;
+                    }
 
                     isMeasuringPcm = true;
                     if (TxtApex6PcmMeasureAction != null)
@@ -2969,11 +2981,42 @@ namespace ApexSenseBridgeTray
             {
                 try
                 {
+                    // 1. Signal StopPending (2) so audio thread can flush any in-flight deferred peaks
+                    try
+                    {
+                        using (new PcmGuard(pcmLiveMutex))
+                        {
+                            if (pcmLiveAccessor.ReadUInt32(8) == 1)
+                            {
+                                pcmLiveAccessor.Write(8, (uint)2); // StopPending
+                            }
+                        }
+                    }
+                    catch { }
+
+                    // 2. Poll up to 150ms in 5ms intervals (without holding lock, so render thread can acquire and flush)
+                    bool flushed = false;
+                    for (int wait = 0; wait < 30; ++wait)
+                    {
+                        System.Threading.Thread.Sleep(5);
+                        uint state = pcmLiveAccessor.ReadUInt32(8);
+                        if (state == 0)
+                        {
+                            flushed = true;
+                            break;
+                        }
+                    }
+
+                    // 3. Finalize stop under mutex lock and capture snapshot
                     using (new PcmGuard(pcmLiveMutex))
                     {
                         pcmLiveAccessor.Write(8, (uint)0);
-                        pcmStoppedSnapshot = new byte[76];
-                        pcmLiveAccessor.ReadArray(0, pcmStoppedSnapshot, 0, 76);
+                        if (!flushed)
+                        {
+                            pcmLiveAccessor.Write(72, (uint)1); // mark measurementIncomplete
+                        }
+                        pcmStoppedSnapshot = new byte[PcmLiveBlockSize];
+                        pcmLiveAccessor.ReadArray(0, pcmStoppedSnapshot, 0, PcmLiveBlockSize);
                         pcmMeasurementComplete = BitConverter.ToUInt32(pcmStoppedSnapshot, 28) == activeMeasurementGen;
                     }
                     ushort left16 = BitConverter.ToUInt16(pcmStoppedSnapshot, 32);
@@ -3052,8 +3095,8 @@ namespace ApexSenseBridgeTray
             if (!isMeasuringPcm) return;
             try
             {
-                byte[] snapshot = new byte[76];
-                using (new PcmGuard(pcmLiveMutex)) pcmLiveAccessor.ReadArray(0, snapshot, 0, 76);
+                byte[] snapshot = new byte[PcmLiveBlockSize];
+                using (new PcmGuard(pcmLiveMutex)) pcmLiveAccessor.ReadArray(0, snapshot, 0, PcmLiveBlockSize);
                 ushort curL = BitConverter.ToUInt16(snapshot, 16);
                 ushort curR = BitConverter.ToUInt16(snapshot, 18);
                 ushort maxPeak = BitConverter.ToUInt16(snapshot, 36);

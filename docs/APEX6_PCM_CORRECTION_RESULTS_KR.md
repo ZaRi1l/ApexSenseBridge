@@ -1,5 +1,16 @@
 # APEX 6 PCM 수정 검증 기록
 
+## 0500105 이후 P0 최종 검증 보완
+
+1. **`Apex6PcmLiveMetrics.h` 전처리/중괄호 구조 정상화:**
+   - `updateLive()` 종료부의 중복 `(void)` 처리, `#endif`, `}`를 제거하여 문법 구조를 정상화.
+2. **76바이트 IPC 레이아웃 크기·버전 일치 (`GameListWindow.xaml.cs`):**
+   - `CreateViewAccessor(0, PcmLiveBlockSize, ...)` 및 스냅샷 버퍼를 76바이트로 일치시키고, `Capacity >= 76`, `Magic == 0x50365041`, `Version == 2` 불일치 시 안전 실패 처리.
+3. **결정적 경합 테스트의 실제 스레드 분리 (`test_pcm_header_standalone.cpp`):**
+   - 별도 `RenderWorker` 스레드를 사용하여 단일 스레드 재진입(re-entrancy)을 방지하고, 클라이언트가 Mutex를 쥔 상태에서 실제 `Try-Lock` 실패(0ms 즉시 반환), 지연 피크 누적, 잠금 해제 후 복원, 세대 경계 격리, `StopPending` 플러시를 검증.
+4. **StopPending=2 종료 프로토콜 통일:**
+   - C# UI에서 측정 종료 시 `StopPending = 2`를 쓴 뒤 렌더 루프가 플러시를 완료(`measurementActive == 0`)할 때까지 대기(최대 150ms). 타임아웃 시 `measurementIncomplete = 1`을 기록하여 불완전한 측정이 저장되지 않도록 차단.
+
 ## c32d832 이후 검증 보완
 
 - PCM 단독 테스트는 assert 대신 Release에서도 실행되는 CHECK 사용. CTest에 의도적 실패 확인을 추가했으나 C++/CTest는 이 호스트에서 미실행.

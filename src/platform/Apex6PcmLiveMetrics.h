@@ -243,11 +243,6 @@ public:
         (void)totalActiveDrops; (void)totalProcessedSamples; (void)totalClippedSamples;
 #endif
     }
-        (void)left16; (void)right16; (void)rawLeft16; (void)rawRight16;
-        (void)outLeft8; (void)outRight8; (void)channels; (void)quadraphonic;
-        (void)totalActiveDrops; (void)totalProcessedSamples; (void)totalClippedSamples;
-#endif
-    }
 
     [[nodiscard]] bool isMeasurementActive() const noexcept {
 #ifdef _WIN32

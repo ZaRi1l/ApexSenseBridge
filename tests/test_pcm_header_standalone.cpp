@@ -26,14 +26,67 @@ public:
         view->measurementGeneration = generation;
         view->measurementActive = 1;
     }
+    void requestStopPending() {
+        asb::platform::Apex6PcmLock lock(mutex); CHECK(lock);
+        view->measurementActive = 2; // StopPending
+    }
     asb::platform::Apex6PcmLiveBlock snapshot(bool stop = false) {
         asb::platform::Apex6PcmLock lock(mutex); CHECK(lock);
         if (stop) view->measurementActive = 0;
         return *view;
     }
+    HANDLE getMutex() const { return mutex; }
 private:
     HANDLE mutex{}, mapping{};
     asb::platform::Apex6PcmLiveBlock* view{};
+};
+
+// Distinct render worker running on a separate thread to guarantee genuine cross-thread contention
+struct RenderWorker {
+    asb::platform::Apex6PcmLiveServer& server;
+    std::atomic_bool ready{false};
+    std::atomic_bool done{false};
+    std::atomic_bool stop{false};
+
+    std::uint16_t left = 0;
+    std::uint16_t right = 0;
+    std::uint16_t rawL = 0;
+    std::uint16_t rawR = 0;
+    std::uint8_t outL = 0;
+    std::uint8_t outR = 0;
+    std::uint64_t drops = 0;
+    std::uint64_t processed = 0;
+    std::uint64_t clips = 0;
+    std::thread thread;
+
+    explicit RenderWorker(asb::platform::Apex6PcmLiveServer& s) : server(s) {
+        thread = std::thread([this] {
+            while (!stop.load()) {
+                if (ready.load()) {
+                    server.updateLive(left, right, rawL, rawR, outL, outR, 4, true, drops, processed, clips);
+                    ready.store(false);
+                    done.store(true);
+                }
+                std::this_thread::yield();
+            }
+        });
+    }
+
+    ~RenderWorker() {
+        stop.store(true);
+        if (thread.joinable()) thread.join();
+    }
+
+    void call(std::uint16_t l, std::uint16_t r, std::uint16_t rl, std::uint16_t rr,
+              std::uint8_t ol, std::uint8_t or_, std::uint64_t d, std::uint64_t p, std::uint64_t c) {
+        left = l; right = r; rawL = rl; rawR = rr; outL = ol; outR = or_;
+        drops = d; processed = p; clips = c;
+        done.store(false);
+        ready.store(true);
+        while (!done.load()) {
+            std::this_thread::yield();
+        }
+    }
 };
 
 // NOTE: testPcmLiveConcurrency is an IPC shared-memory stress test for
@@ -92,33 +145,32 @@ void testDeterministicMutexContention() {
     const auto token = std::to_string(GetCurrentProcessId()) + "-contention";
     asb::platform::Apex6PcmLiveServer server(token);
     Client client(token);
+    RenderWorker worker(server);
 
     // 1. Client starts generation 1
     client.start(1);
-    server.updateLive(1000, 500, 2000, 1000, 64, 32, 4, true, 0, 16, 0);
+    worker.call(1000, 500, 2000, 1000, 64, 32, 0, 16, 0);
     auto initial = client.snapshot();
     CHECK(initial.measuredMaxPeak16 == 1000 && initial.measuredProcessedSamples == 16);
+    CHECK(initial.measuredMissedUpdates == 0);
 
-    // 2. Client deliberately acquires and holds the mutex
-    const auto name = "Local\\ApexSenseBridge.Session." + token + ".Apex6Pcm.Mutex";
-    HANDLE mutex = OpenMutexA(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE, name.c_str());
-    CHECK(mutex);
-    CHECK(WaitForSingleObject(mutex, INFINITE) == WAIT_OBJECT_0);
+    // 2. Client deliberately acquires and holds the mutex on main thread
+    {
+        asb::platform::Apex6PcmLock hold(client.getMutex());
+        CHECK(hold);
 
-    // 3. Audio render thread calls updateLive with a high peak (28000)
-    // Server must return IMMEDIATELY via Try-Lock (0ms) without stalling or blocking!
-    const auto startTick = std::chrono::steady_clock::now();
-    server.updateLive(28000, 14000, 30000, 15000, 114, 57, 4, true, 1, 32, 2);
-    const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - startTick).count();
-    CHECK(elapsedMs < 100); // Proves non-blocking execution!
+        // 3. Audio render thread (worker) calls updateLive with high peak (28000).
+        // Since worker runs on a DIFFERENT thread, Windows mutex re-entrancy does NOT apply,
+        // so Try-Lock (0ms) MUST fail and return immediately without blocking!
+        const auto startTick = std::chrono::steady_clock::now();
+        worker.call(28000, 14000, 30000, 15000, 114, 57, 1, 32, 2);
+        const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - startTick).count();
+        CHECK(elapsedMs < 100); // Proves non-blocking execution under genuine contention!
+    } // Client releases mutex
 
-    // 4. Release mutex so server can fold in the deferred peak
-    ReleaseMutex(mutex);
-    CloseHandle(mutex);
-
-    // 5. Next update occurs uncontented with a lower peak (500)
-    server.updateLive(500, 250, 500, 250, 10, 5, 4, true, 1, 48, 2);
+    // 4. Next update occurs uncontented on worker thread with a lower peak (500)
+    worker.call(500, 250, 500, 250, 10, 5, 1, 48, 2);
     auto afterContention = client.snapshot(true);
 
     // Verify deferred peak 28000 was preserved and folded into the measurement!
@@ -127,13 +179,36 @@ void testDeterministicMutexContention() {
     CHECK(afterContention.measuredProcessedSamples == 48);
     CHECK(afterContention.measuredMissedUpdates >= 1);
 
-    // 6. Test generation boundary: start generation 2
+    // 5. Test generation boundary: start generation 2
+    // Client starts generation 2
     client.start(2);
-    // Ensure deferred peaks from generation 1 NEVER leak into generation 2
-    server.updateLive(300, 150, 400, 200, 8, 4, 4, true, 1, 64, 2);
+    // Worker sends sample with peak 300
+    worker.call(300, 150, 400, 200, 8, 4, 1, 64, 2);
     auto gen2 = client.snapshot(true);
+    CHECK(gen2.sessionGenerationEcho == 2);
+    // Ensure deferred peaks from generation 1 NEVER leak into generation 2
     CHECK(gen2.measuredMaxPeak16 == 300); // Must be 300, NOT 28000!
     CHECK(gen2.rawMeasuredHapticPeak16 == 400);
+
+    // 6. Test StopPending flush
+    client.start(3);
+    worker.call(1000, 500, 1000, 500, 64, 32, 1, 80, 2);
+
+    // Contention during generation 3: client holds lock while worker renders peak 25000
+    {
+        asb::platform::Apex6PcmLock hold(client.getMutex());
+        CHECK(hold);
+        worker.call(25000, 12500, 25000, 12500, 127, 64, 1, 96, 4);
+    }
+    // Client requests StopPending (2)
+    client.requestStopPending();
+    // Worker runs next update -> flushes deferred 25000 peak and transitions active to 0
+    worker.call(200, 100, 200, 100, 10, 5, 1, 112, 4);
+
+    auto stopped = client.snapshot();
+    CHECK(stopped.measurementActive == 0); // Worker flushed and completed stop!
+    CHECK(stopped.measuredMaxPeak16 == 25000); // Deferred peak preserved!
+    CHECK(stopped.measurementIncomplete == 0);
 }
 
 void testIntervalReset() {
