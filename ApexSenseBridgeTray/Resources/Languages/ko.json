@@ -389,6 +389,7 @@
   "Loc_Apex6PcmReference": "관측된 기준 피크",
   "Loc_Apex6PcmTarget": "목표 최대 진폭",
   "Loc_Apex6PcmLinearGain": "선형 증폭 배율",
+  "Loc_Apex6PcmCompandingGain": "곡선 증폭 배율 (Companding)",
   "Loc_Apex6PcmMaxGain": "최대 증폭 상한",
   "Loc_Apex6PcmEffectiveGain": "계산된 실제 배율",
   "Loc_Apex6PcmMeasureStart": "진폭 측정 시작",

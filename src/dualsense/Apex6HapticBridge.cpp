@@ -528,8 +528,10 @@ flydigi::apex6::MotorBlock Apex6HapticBridge::renderBlock(
                 rumbleHigh);
         }
     }
-    if (leftPcmActive || rightPcmActive) {
-        pcmProcessedSamples_.fetch_add(output.size(), std::memory_order_relaxed);
+    if (routeGrips_ && (leftPcmActive || rightPcmActive)) {
+        pcmProcessedSamples_.fetch_add(output.size() *
+            (static_cast<unsigned>(leftPcmActive) + static_cast<unsigned>(rightPcmActive)),
+            std::memory_order_relaxed);
         if (clippedSamplesCount > 0) {
             pcmOutputClippedSamples_.fetch_add(clippedSamplesCount, std::memory_order_relaxed);
         }
@@ -559,9 +561,11 @@ flydigi::apex6::MotorBlock Apex6HapticBridge::renderBlock(
         static_cast<std::uint16_t>(rawAudioPeaks_[3].load(std::memory_order_relaxed)),
         static_cast<std::uint8_t>(leftPcmOutputPeak),
         static_cast<std::uint8_t>(rightPcmOutputPeak),
-        4, true,
-        waveformActiveDrops_.load(std::memory_order_relaxed) > 0,
-        clippedSamplesCount);
+        static_cast<std::uint8_t>(pcmAudioChannels_.load(std::memory_order_relaxed)),
+        pcmAudioVerified_.load(std::memory_order_relaxed),
+        waveformActiveDrops_.load(std::memory_order_relaxed),
+        pcmProcessedSamples_.load(std::memory_order_relaxed),
+        pcmOutputClippedSamples_.load(std::memory_order_relaxed));
     if ((leftPcmActive || rightPcmActive) &&
         std::any_of(output.begin(), output.end(), [leftPcmActive, rightPcmActive](const auto& sample) {
             return (leftPcmActive && sample.leftGrip != 0) ||

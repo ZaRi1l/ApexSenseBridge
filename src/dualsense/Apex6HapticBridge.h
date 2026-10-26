@@ -158,6 +158,10 @@ public:
     void updateTriggerPositions(std::uint8_t left, std::uint8_t right) noexcept;
     void setDiagnosticTrigger(const ForceTriggerCommand& command) noexcept;
     void setDiagnosticGrips(std::uint8_t left, std::uint8_t right) noexcept;
+    void setPcmAudioFormat(unsigned channels, bool verifiedQuadraphonic) noexcept {
+        pcmAudioChannels_.store(channels, std::memory_order_relaxed);
+        pcmAudioVerified_.store(verifiedQuadraphonic, std::memory_order_relaxed);
+    }
 
     [[nodiscard]] bool failed() const noexcept;
     [[nodiscard]] std::string error() const;
@@ -193,6 +197,8 @@ private:
     unsigned pcmGainPercent_ = 100;
     Apex6PcmScaler pcmScaler_{};
     platform::Apex6PcmLiveServer liveServer_{};
+    std::atomic_uint pcmAudioChannels_{0};
+    std::atomic_bool pcmAudioVerified_{false};
     std::uint64_t triggerSampleOffset_ = 0;
     mutable std::mutex stateMutex_;
     std::condition_variable stopSignal_;

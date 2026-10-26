@@ -235,6 +235,41 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
                 error = "--apex6-pcm-max-gain-percent requires an integer percentage from 100 to 400.";
                 return false;
             }
+        } else if (value == "--apex6-pcm-reference-peak-abs16") {
+            if (++i >= argc) {
+                error = "--apex6-pcm-reference-peak-abs16 requires an integer amplitude from 1 to 32768.";
+                return false;
+            }
+            try {
+                std::size_t consumed = 0;
+                const auto parsed = std::stoul(argv[i], &consumed);
+                if (consumed != std::string_view(argv[i]).size() || parsed < 1 || parsed > 32768 || argv[i][0] == '-') {
+                    throw std::out_of_range("apex6-pcm-reference-peak-abs16");
+                }
+                options.apex6PcmConfig.referencePeakAbs16 = static_cast<unsigned>(parsed);
+                options.apex6PcmOptionsExplicit = true;
+            } catch (...) {
+                error = "--apex6-pcm-reference-peak-abs16 requires an integer amplitude from 1 to 32768.";
+                return false;
+            }
+        } else if (value == "--apex6-pcm-companding-gain-percent") {
+            if (++i >= argc) {
+                error = "--apex6-pcm-companding-gain-percent requires an integer percentage from 100 to 200.";
+                return false;
+            }
+            try {
+                std::size_t consumed = 0;
+                const auto parsed = std::stoul(argv[i], &consumed);
+                if (consumed != std::string_view(argv[i]).size() || parsed < 100 || parsed > 200 || argv[i][0] == '-') {
+                    throw std::out_of_range("apex6-pcm-companding-gain-percent");
+                }
+                options.apex6PcmConfig.compandingGainPercent = static_cast<unsigned>(parsed);
+                options.apex6PcmConfig.legacyGainPercent = static_cast<unsigned>(parsed);
+                options.apex6PcmOptionsExplicit = true;
+            } catch (...) {
+                error = "--apex6-pcm-companding-gain-percent requires an integer percentage from 100 to 200.";
+                return false;
+            }
         } else if (value == "--apex4-gyro-strength" ||
                    value == "--apex4-gyro-yaw-strength") {
             if (++i >= argc) {
@@ -355,6 +390,9 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
             return false;
         }
     }
+    const bool calibrationsSupplied = options.controllerCalibrations[0] ||
+                                      options.controllerCalibrations[1] ||
+                                      options.controllerCalibrations[2];
     if (options.hapticThresholdExplicit && !options.routeRumble) {
         error = "--haptic-threshold requires --rumble.";
         return false;
@@ -367,17 +405,20 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
         error = "Cannot combine legacy --apex6-haptic-gain with --apex6-pcm-* options.";
         return false;
     }
-    if (options.apex6HapticGainExplicit && !options.routeRumble) {
+    if (options.apex6HapticGainExplicit && !options.routeRumble && !calibrationsSupplied) {
         error = "--apex6-haptic-gain requires --rumble.";
         return false;
     }
-    if (options.apex6PcmOptionsExplicit && !options.routeRumble) {
+    if (options.apex6PcmOptionsExplicit &&
+        options.apex6PcmConfig.mode != asb::dualsense::Apex6PcmMode::Original &&
+        !options.routeRumble && !calibrationsSupplied) {
         error = "--apex6-pcm-* options require --rumble.";
         return false;
     }
     if (options.apex6HapticGainExplicit) {
         options.apex6PcmConfig.mode = asb::dualsense::Apex6PcmMode::Companding;
         options.apex6PcmConfig.legacyGainPercent = options.apex6HapticGainPercent;
+        options.apex6PcmConfig.compandingGainPercent = options.apex6HapticGainPercent;
     }
     error.clear();
     return true;
@@ -392,7 +433,9 @@ std::string_view bridgeCommandUsage() noexcept {
            "[--apex6-haptic-gain 100..200] "
            "[--apex6-pcm-mode original|companding|linear|normalize] "
            "[--apex6-pcm-linear-gain-percent 0..400] "
+           "[--apex6-pcm-companding-gain-percent 100..200] "
            "[--apex6-pcm-reference-percent 1..100] "
+           "[--apex6-pcm-reference-peak-abs16 1..32768] "
            "[--apex6-pcm-target-percent 1..100] "
            "[--apex6-pcm-max-gain-percent 100..400] "
            "[--controller-calibration MODEL:TRIGGER:VIBRATION:THRESHOLD:RUMBLE:RGB:GYRO:YAW] "
@@ -428,14 +471,12 @@ bool applyControllerCalibration(BridgeCommandOptions& options,
     options.apex4GyroStrengthPercent = c.gyro;
     options.apex4GyroYawStrengthPercent = c.gyroYaw;
     if (index != 1) options.apexProfileSlot.reset();
-    if (options.apex6HapticGainExplicit && !options.routeRumble) {
+    if (verifiedModel == "apex6" && options.apex6HapticGainExplicit && !options.routeRumble) {
         error = "--apex6-haptic-gain requires grip haptics in the selected calibration.";
         return false;
     }
-    if (options.apex6PcmOptionsExplicit && !options.routeRumble) {
-        error = "--apex6-pcm-* options require grip haptics in the selected calibration.";
-        return false;
-    }
+    // PCM policy is dormant when grips are disabled and never affects APEX 4/5.
+    // Do not change the model calibration's rumble choice to activate PCM.
     return true;
 }
 

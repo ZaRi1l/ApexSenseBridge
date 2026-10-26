@@ -229,7 +229,31 @@ int main() {
 
     // Requires --rumble
     assert(!parse({"--apex6-pcm-mode", "normalize"}).succeeded);
-    assert(!parse({"--apex6-pcm-linear-gain-percent", "200"}).succeeded);
+    assert(!parse({"--apex6-pcm-mode", "linear", "--apex6-pcm-linear-gain-percent", "200"}).succeeded);
+    assert(parse({"--apex6-pcm-mode", "original"}).succeeded);
+    auto trayPcm = parse({"--apex6-pcm-mode", "normalize", "--apex6-pcm-reference-peak-abs16", "10028",
+        "--controller-calibration", "apex4:100:100:12:1:0:100:100",
+        "--controller-calibration", "apex5:100:100:12:0:0:100:100",
+        "--controller-calibration", "apex6:100:100:0:1:0:100:100"});
+    assert(trayPcm.succeeded && trayPcm.options.apex6PcmConfig.referencePeakAbs16 == 10028);
+    for (const auto model : {"apex4", "apex5", "apex6"}) {
+        auto options = trayPcm.options;
+        std::string error;
+        assert(asb::cli::applyControllerCalibration(options, model, error));
+        assert(options.routeRumble == (std::string_view(model) != "apex5"));
+    }
+    auto disabledPcm = parse({"--apex6-pcm-mode", "linear",
+        "--controller-calibration", "apex6:100:100:0:0:0:100:100"});
+    assert(disabledPcm.succeeded);
+    assert(asb::cli::applyControllerCalibration(disabledPcm.options, "apex6", calibrationError));
+    assert(!disabledPcm.options.routeRumble);
+    const auto precise = parse({"--rumble", "--apex6-pcm-mode", "normalize",
+        "--apex6-pcm-reference-peak-abs16", "10028"});
+    assert(precise.succeeded && precise.options.apex6PcmConfig.referencePeakAbs16 == 10028);
+    assert(!parse({"--rumble", "--apex6-pcm-reference-peak-abs16", "32769"}).succeeded);
+    const auto curve = parse({"--rumble", "--apex6-pcm-mode", "companding",
+        "--apex6-pcm-companding-gain-percent", "175"});
+    assert(curve.succeeded && curve.options.apex6PcmConfig.compandingGainPercent == 175);
 
     // Invalid parameters
     assert(!parse({"--rumble", "--apex6-pcm-mode", "invalid"}).succeeded);

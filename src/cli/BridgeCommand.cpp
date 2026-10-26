@@ -783,6 +783,8 @@ int commandBridgeTriggers(int argc, char** argv) {
         // opens this endpoint. APEX 4/5 retain their asynchronous startup path.
         audioProtectionOk = audioProtectionFuture.get();
         const auto format = audioProtection.hapticFormat();
+        if (apex6Bridge) apex6Bridge->setPcmAudioFormat(format.channels,
+            format.status == asb::platform::HapticAudioFormatStatus::Quadraphonic);
         std::cout << "apex6_audio_format="
                   << asb::platform::hapticAudioFormatStatusName(format.status) << '\n'
                   << "apex6_audio_mix_channels=" << format.channels << '\n'

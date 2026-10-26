@@ -389,6 +389,7 @@
   "Loc_Apex6PcmReference": "Observed Reference Peak",
   "Loc_Apex6PcmTarget": "Target Peak Amplitude",
   "Loc_Apex6PcmLinearGain": "Linear Amplification Gain",
+  "Loc_Apex6PcmCompandingGain": "Companding Amplification Gain",
   "Loc_Apex6PcmMaxGain": "Maximum Amplification Cap",
   "Loc_Apex6PcmEffectiveGain": "Effective Gain Multiplier",
   "Loc_Apex6PcmMeasureStart": "Start Measurement",

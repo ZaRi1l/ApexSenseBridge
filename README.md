@@ -24,6 +24,68 @@ interface in nine languages.
 
 ---
 
+## APEX 6 PCM correction verification (local fork)
+
+The `491e366` implementation was **not** validated by a Windows engine/WPF
+build. Its Python reimplementations are mathematical examples, not product-code
+integration tests. Do not use their PASS messages as release evidence.
+
+### Home Windows build and automated checks
+
+Use an existing Visual Studio C++/WPF toolchain, CMake, and .NET Framework 4.6.2
+reference assemblies. These commands do not install drivers or change firmware:
+
+```powershell
+.\scripts\build-windows.ps1
+if ($LASTEXITCODE -ne 0) { throw 'Engine build failed' }
+ctest --test-dir .\build-win -C Release --output-on-failure
+if ($LASTEXITCODE -ne 0) { throw 'Native regression tests failed' }
+.\scripts\build-tray-app.ps1
+if ($LASTEXITCODE -ne 0) { throw 'Tray build/tests failed' }
+```
+
+On a machine with PowerShell 7's existing Roslyn libraries and .NET Framework
+runtime assemblies, `./scripts/test-pcm-existing-compiler.ps1` compiles and runs
+the actual C# learning/settings/session regression suite without installing tools.
+It is **not** a WPF build and does not validate .NET 4.6.2 targeting compatibility.
+`python -I tests/test_pcm_wpf_contract.py` checks XAML event/control references
+and token-mapping spelling statically; it is **not** runtime IPC verification.
+
+A focused real-header/Windows IPC regression test is also provided. In an x64
+Visual Studio Developer PowerShell (the compiler must already be installed):
+
+```powershell
+cl /nologo /std:c++20 /EHsc /I src tests/test_pcm_header_standalone.cpp /Fe:tests/bin/pcm-header-test.exe
+if ($LASTEXITCODE -ne 0) { throw 'Header/IPC compilation failed' }
+.\tests\bin\pcm-header-test.exe
+if ($LASTEXITCODE -ne 0) { throw 'Header/IPC regression failed' }
+```
+
+### Hardware / WPF runtime checks still required
+
+1. Close automatic competing sessions and start the bridge before the game.
+   Keep existing drivers/firmware. Confirm quadraphonic four-channel audio.
+2. Start with Original and 100% general strength. Record raw 48kHz (if available),
+   pre-gain 1kHz, and protocol output peaks separately. Output amplitude does not
+   measure physical motor force. Missing raw data is unavailable, not zero.
+3. Select the active game's canonical entry. Measure, stop, save, and remeasure.
+   The second interval must not retain the first interval's maximum. Switching
+   game, stopping/recovering the session, or closing the window must invalidate
+   the old mapping/results; saving another game's data must be refused.
+4. With global Normalize and Use Global enabled, confirm the saved game's exact
+   abs16 reference is passed; an unmeasured game must retain Original output.
+5. Compare repeatable short scenes in Original, Companding, Linear, Normalize.
+   Check numeric inputs/slider synchronization, restart-only application, common
+   L/R gain, clipping counters and no unintended trigger/ordinary-rumble change.
+   A 30% reference with 90% target means 3x PCM amplitude (±1 output LSB), not
+   a guarantee of three times perceived force. Stop on abnormal noise or heat.
+6. Retest APEX 4 and 5 with rumble both enabled and disabled, including active
+   global APEX6 PCM policies; their calibration must remain authoritative.
+
+Tray PCM settings/measurement do not apply automatically to Playnite launches.
+No C++ compiler/CMake was available on the correction host; native compilation,
+full WPF build, runtime IPC and hardware acceptance remain unverified there.
+
 ## Contents
 
 - [Stable 1.0.0 highlights](#stable-100-highlights)

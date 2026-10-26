@@ -708,23 +708,50 @@
                                                     <Border x:Name="RowApex6PcmTarget" Style="{StaticResource SettingRow}" Margin="0,2,0,4">
                                                         <StackPanel>
                                                             <DockPanel>
-                                                                <TextBlock x:Name="TxtApex6PcmTarget" DockPanel.Dock="Right" Style="{StaticResource ValueLabel}"/>
+                                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                                                    <TextBox x:Name="TxtBoxApex6PcmTarget" Width="40" Height="22" Background="#1E293B" Foreground="#38BDF8"
+                                                                             BorderBrush="#334155" BorderThickness="1" TextAlignment="Right" FontSize="11" Padding="2,1"
+                                                                             KeyDown="OnApex6PcmTargetTextKeyDown" LostFocus="OnApex6PcmTargetTextLostFocus"/>
+                                                                    <TextBlock Text=" %" Style="{StaticResource ValueLabel}" VerticalAlignment="Center"/>
+                                                                </StackPanel>
                                                                 <TextBlock Text="{DynamicResource Loc_Apex6PcmTarget}" Style="{StaticResource RowLabel}"/>
                                                             </DockPanel>
                                                             <Slider x:Name="SliderApex6PcmTarget" Style="{StaticResource EffectSlider}" Minimum="10" Maximum="100"
-                                                                    TickFrequency="5" IsSnapToTickEnabled="True" ValueChanged="OnApex6PcmTargetChanged" Margin="0,4,0,0"/>
+                                                                    TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="OnApex6PcmTargetChanged" Margin="0,4,0,0"/>
                                                         </StackPanel>
                                                     </Border>
 
-                                                    <!-- Linear Gain Slider (when linear mode) -->
+                                                    <!-- Linear Gain Slider & Numeric (when linear mode) -->
                                                     <Border x:Name="RowApex6PcmLinear" Style="{StaticResource SettingRow}" Margin="0,2,0,4" Visibility="Collapsed">
                                                         <StackPanel>
                                                             <DockPanel>
-                                                                <TextBlock x:Name="TxtApex6PcmLinear" DockPanel.Dock="Right" Style="{StaticResource ValueLabel}"/>
+                                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                                                    <TextBox x:Name="TxtBoxApex6PcmLinear" Width="40" Height="22" Background="#1E293B" Foreground="#38BDF8"
+                                                                             BorderBrush="#334155" BorderThickness="1" TextAlignment="Right" FontSize="11" Padding="2,1"
+                                                                             KeyDown="OnApex6PcmLinearTextKeyDown" LostFocus="OnApex6PcmLinearTextLostFocus"/>
+                                                                    <TextBlock Text=" %" Style="{StaticResource ValueLabel}" VerticalAlignment="Center"/>
+                                                                </StackPanel>
                                                                 <TextBlock Text="{DynamicResource Loc_Apex6PcmLinearGain}" Style="{StaticResource RowLabel}"/>
                                                             </DockPanel>
                                                             <Slider x:Name="SliderApex6PcmLinear" Style="{StaticResource EffectSlider}" Minimum="0" Maximum="400"
-                                                                    TickFrequency="25" IsSnapToTickEnabled="True" ValueChanged="OnApex6PcmLinearChanged" Margin="0,4,0,0"/>
+                                                                    TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="OnApex6PcmLinearChanged" Margin="0,4,0,0"/>
+                                                        </StackPanel>
+                                                    </Border>
+
+                                                    <!-- Companding Gain Slider & Numeric (when companding mode) -->
+                                                    <Border x:Name="RowApex6PcmCompanding" Style="{StaticResource SettingRow}" Margin="0,2,0,4" Visibility="Collapsed">
+                                                        <StackPanel>
+                                                            <DockPanel>
+                                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                                                    <TextBox x:Name="TxtBoxApex6PcmCompanding" Width="40" Height="22" Background="#1E293B" Foreground="#38BDF8"
+                                                                             BorderBrush="#334155" BorderThickness="1" TextAlignment="Right" FontSize="11" Padding="2,1"
+                                                                             KeyDown="OnApex6PcmCompandingTextKeyDown" LostFocus="OnApex6PcmCompandingTextLostFocus"/>
+                                                                    <TextBlock Text=" %" Style="{StaticResource ValueLabel}" VerticalAlignment="Center"/>
+                                                                </StackPanel>
+                                                                <TextBlock Text="{DynamicResource Loc_Apex6PcmCompandingGain}" Style="{StaticResource RowLabel}"/>
+                                                            </DockPanel>
+                                                            <Slider x:Name="SliderApex6PcmCompanding" Style="{StaticResource EffectSlider}" Minimum="100" Maximum="200"
+                                                                    TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="OnApex6PcmCompandingChanged" Margin="0,4,0,0"/>
                                                         </StackPanel>
                                                     </Border>
 
@@ -1130,11 +1157,29 @@
                                                         </DockPanel>
                                                         <StackPanel x:Name="PnlGlobalApex6PcmLinear" Visibility="Collapsed" Margin="0,4,0,0">
                                                             <DockPanel>
-                                                                <TextBlock x:Name="TxtGlobalApex6PcmLinear" DockPanel.Dock="Right" Style="{StaticResource ValueLabel}"/>
+                                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                                                    <TextBox x:Name="TxtBoxGlobalApex6PcmLinear" Width="40" Height="22" Background="#1E293B" Foreground="#38BDF8"
+                                                                             BorderBrush="#334155" BorderThickness="1" TextAlignment="Right" FontSize="11" Padding="2,1"
+                                                                             KeyDown="OnGlobalApex6PcmLinearTextKeyDown" LostFocus="OnGlobalApex6PcmLinearTextLostFocus"/>
+                                                                    <TextBlock Text=" %" Style="{StaticResource ValueLabel}" VerticalAlignment="Center"/>
+                                                                </StackPanel>
                                                                 <TextBlock Text="{DynamicResource Loc_Apex6PcmLinearGain}" Style="{StaticResource RowLabel}"/>
                                                             </DockPanel>
                                                             <Slider x:Name="SliderGlobalApex6PcmLinear" Style="{StaticResource EffectSlider}" Minimum="0" Maximum="400"
-                                                                    TickFrequency="25" IsSnapToTickEnabled="True" ValueChanged="OnGlobalApex6PcmSettingChanged" Margin="0,4,0,0"/>
+                                                                    TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="OnGlobalApex6PcmSettingChanged" Margin="0,4,0,0"/>
+                                                        </StackPanel>
+                                                        <StackPanel x:Name="PnlGlobalApex6PcmCompanding" Visibility="Collapsed" Margin="0,4,0,0">
+                                                            <DockPanel>
+                                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                                                    <TextBox x:Name="TxtBoxGlobalApex6PcmCompanding" Width="40" Height="22" Background="#1E293B" Foreground="#38BDF8"
+                                                                             BorderBrush="#334155" BorderThickness="1" TextAlignment="Right" FontSize="11" Padding="2,1"
+                                                                             KeyDown="OnGlobalApex6PcmCompandingTextKeyDown" LostFocus="OnGlobalApex6PcmCompandingTextLostFocus"/>
+                                                                    <TextBlock Text=" %" Style="{StaticResource ValueLabel}" VerticalAlignment="Center"/>
+                                                                </StackPanel>
+                                                                <TextBlock Text="{DynamicResource Loc_Apex6PcmCompandingGain}" Style="{StaticResource RowLabel}"/>
+                                                            </DockPanel>
+                                                            <Slider x:Name="SliderGlobalApex6PcmCompanding" Style="{StaticResource EffectSlider}" Minimum="100" Maximum="200"
+                                                                    TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="OnGlobalApex6PcmCompandingChanged" Margin="0,4,0,0"/>
                                                         </StackPanel>
                                                     </StackPanel>
                                                 </Border>

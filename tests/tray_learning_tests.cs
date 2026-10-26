@@ -707,7 +707,7 @@ internal static class TrayLearningTests
     {
         var settings = new TraySettings();
         Assert(settings.GetApex6PcmGlobal().Mode == "original", "Default global mode was not original.");
-        Assert(settings.BuildApex6PcmArguments("zenless-zone-zero") == " --apex6-pcm-mode original",
+        Assert(settings.BuildApex6PcmArguments("zenless-zone-zero") == string.Empty,
             "Unconfigured game did not default to original mode.");
 
         // Global linear gain
@@ -744,9 +744,24 @@ internal static class TrayLearningTests
         var restored = serializer.Deserialize<TraySettings>(json);
         Assert(restored != null && restored.GetApex6PcmGlobal().Mode == "linear",
             "Global PCM settings did not survive serialization.");
-        var restoredZzz = restored.GetApex6PcmGameSettings("zenless-zone-zero");
+        var restoredZzz = restored.GetApex6PcmGameSettings("ZENLESS-ZONE-ZERO");
         Assert(restoredZzz != null && !restoredZzz.UseGlobal && restoredZzz.MeasuredReferencePercent == 30,
             "Per-game PCM settings did not survive serialization.");
+
+        restoredZzz.UseGlobal = true;
+        restoredZzz.MeasuredReferencePeakAbs16 = 10028;
+        restored.GetApex6PcmGlobal().Mode = "normalize";
+        Assert(restored.BuildApex6PcmArguments("zenless-zone-zero").Contains("--apex6-pcm-reference-peak-abs16 10028"),
+            "Global normalization lost the game's exact measured peak.");
+        Assert(restored.BuildApex6PcmArguments("pragmata") == string.Empty,
+            "Measured reference leaked to an unmeasured game.");
+        restored.GetApex6PcmGlobal().Mode = "companding";
+        restored.GetApex6PcmGlobal().CompandingGainPercent = 175;
+        Assert(restored.BuildApex6PcmArguments("zenless-zone-zero").Contains("--apex6-pcm-companding-gain-percent 175"),
+            "Global companding gain was not forwarded.");
+        var roundtrip = serializer.Deserialize<TraySettings>(serializer.Serialize(restored));
+        Assert(roundtrip.GetApex6PcmGameSettings("zenless-zone-zero").MeasuredReferencePeakAbs16 == 10028,
+            "Exact measured peak changed during serialization.");
 
         // Legacy JSON migration without PCM fields
         var legacy = serializer.Deserialize<TraySettings>("{\"AutoDetectGames\":true}");
@@ -832,7 +847,7 @@ internal static class TrayLearningTests
             "Model-specific amplification did not survive persistence.");
         arguments = settings.BuildControllerCalibrationArguments();
         var builder = typeof(EngineSessionManager).GetMethod("BuildArguments", BindingFlags.Static | BindingFlags.NonPublic);
-        var sessionArguments = (string)builder.Invoke(null, new object[] { "standard", settings, 3 });
+        var sessionArguments = (string)builder.Invoke(null, new object[] { "standard", settings, 3, null });
         Assert(sessionArguments.EndsWith(arguments, StringComparison.Ordinal) &&
             !sessionArguments.Contains("--sync-lightbar") && !sessionArguments.Contains("--haptic-threshold"),
             "Session launch used legacy global tuning instead of verified-model selection.");

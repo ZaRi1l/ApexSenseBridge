@@ -30,6 +30,7 @@ namespace ApexSenseBridgeTray.Models
     {
         public string Mode { get; set; }
         public int LinearGainPercent { get; set; }
+        public int CompandingGainPercent { get; set; }
         public int TargetPeakPercent { get; set; }
         public int MaxGainPercent { get; set; }
 
@@ -37,6 +38,7 @@ namespace ApexSenseBridgeTray.Models
         {
             Mode = "original";
             LinearGainPercent = 100;
+            CompandingGainPercent = 100;
             TargetPeakPercent = 90;
             MaxGainPercent = 400;
         }
@@ -48,6 +50,7 @@ namespace ApexSenseBridgeTray.Models
             if (Mode != "original" && Mode != "companding" && Mode != "linear" && Mode != "normalize")
                 Mode = "original";
             LinearGainPercent = Math.Max(0, Math.Min(400, LinearGainPercent));
+            CompandingGainPercent = Math.Max(100, Math.Min(200, CompandingGainPercent));
             TargetPeakPercent = Math.Max(1, Math.Min(100, TargetPeakPercent));
             MaxGainPercent = Math.Max(100, Math.Min(400, MaxGainPercent));
         }
@@ -58,10 +61,11 @@ namespace ApexSenseBridgeTray.Models
         public bool UseGlobal { get; set; }
         public string Mode { get; set; }
         public int MeasuredReferencePeakAbs16 { get; set; }
-        public int MeasuredReferencePercent { get; set; }
+        public double MeasuredReferencePercent { get; set; }
         public int TargetPeakPercent { get; set; }
         public int MaxGainPercent { get; set; }
         public int LinearGainPercent { get; set; }
+        public int CompandingGainPercent { get; set; }
         public string MeasuredUtc { get; set; }
         public int MeasurementVersion { get; set; }
         public int ObservedLeftPeakAbs16 { get; set; }
@@ -76,6 +80,7 @@ namespace ApexSenseBridgeTray.Models
             TargetPeakPercent = 90;
             MaxGainPercent = 400;
             LinearGainPercent = 100;
+            CompandingGainPercent = 100;
             MeasurementVersion = 1;
             ObservedStatus = "none";
         }
@@ -87,10 +92,11 @@ namespace ApexSenseBridgeTray.Models
             if (Mode != "original" && Mode != "companding" && Mode != "linear" && Mode != "normalize")
                 Mode = "normalize";
             MeasuredReferencePeakAbs16 = Math.Max(0, Math.Min(32768, MeasuredReferencePeakAbs16));
-            MeasuredReferencePercent = Math.Max(0, Math.Min(100, MeasuredReferencePercent));
+            MeasuredReferencePercent = Math.Max(0.0, Math.Min(100.0, MeasuredReferencePercent));
             TargetPeakPercent = Math.Max(1, Math.Min(100, TargetPeakPercent));
             MaxGainPercent = Math.Max(100, Math.Min(400, MaxGainPercent));
             LinearGainPercent = Math.Max(0, Math.Min(400, LinearGainPercent));
+            CompandingGainPercent = Math.Max(100, Math.Min(200, CompandingGainPercent));
             if (string.IsNullOrWhiteSpace(ObservedStatus)) ObservedStatus = "none";
         }
     }
@@ -196,6 +202,12 @@ namespace ApexSenseBridgeTray.Models
             {
                 if (Apex6PcmGames == null)
                     Apex6PcmGames = new Dictionary<string, Apex6PcmGameSettings>(StringComparer.OrdinalIgnoreCase);
+                else if (!Equals(Apex6PcmGames.Comparer, StringComparer.OrdinalIgnoreCase))
+                {
+                    var normalized = new Dictionary<string, Apex6PcmGameSettings>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var pair in Apex6PcmGames) normalized[pair.Key] = pair.Value;
+                    Apex6PcmGames = normalized;
+                }
 
                 Apex6PcmGameSettings settings;
                 if (Apex6PcmGames.TryGetValue(normalizedKey.Trim(), out settings) && settings != null)
@@ -214,6 +226,12 @@ namespace ApexSenseBridgeTray.Models
             {
                 if (Apex6PcmGames == null)
                     Apex6PcmGames = new Dictionary<string, Apex6PcmGameSettings>(StringComparer.OrdinalIgnoreCase);
+                else if (!Equals(Apex6PcmGames.Comparer, StringComparer.OrdinalIgnoreCase))
+                {
+                    var normalized = new Dictionary<string, Apex6PcmGameSettings>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var pair in Apex6PcmGames) normalized[pair.Key] = pair.Value;
+                    Apex6PcmGames = normalized;
+                }
 
                 string key = normalizedKey.Trim();
                 if (settings == null)
@@ -237,29 +255,39 @@ namespace ApexSenseBridgeTray.Models
 
                 string mode = global.Mode;
                 int linear = global.LinearGainPercent;
+                int companding = global.CompandingGainPercent;
                 int target = global.TargetPeakPercent;
                 int maxGain = global.MaxGainPercent;
-                int refPct = 0;
+                int refPeakAbs16 = 0;
+                double refPct = 0.0;
+
+                // Always check game's measured reference peak, even if game.UseGlobal is true (P0-4)
+                if (game != null)
+                {
+                    refPeakAbs16 = game.MeasuredReferencePeakAbs16;
+                    refPct = game.MeasuredReferencePercent;
+                    if (refPct <= 0.0 && refPeakAbs16 > 0)
+                        refPct = refPeakAbs16 / 327.67;
+                }
 
                 if (game != null && !game.UseGlobal)
                 {
                     mode = game.Mode;
                     linear = game.LinearGainPercent;
+                    companding = game.CompandingGainPercent;
                     target = game.TargetPeakPercent;
                     maxGain = game.MaxGainPercent;
-                    if (game.MeasuredReferencePercent > 0)
-                        refPct = game.MeasuredReferencePercent;
-                    else if (game.MeasuredReferencePeakAbs16 > 0)
-                        refPct = (int)Math.Round(game.MeasuredReferencePeakAbs16 / 327.67);
                 }
 
                 if (string.Equals(mode, "original", StringComparison.OrdinalIgnoreCase))
                 {
-                    return " --apex6-pcm-mode original";
+                    // Original is default in engine: omit to avoid --rumble requirement (P0-1)
+                    return string.Empty;
                 }
                 if (string.Equals(mode, "companding", StringComparison.OrdinalIgnoreCase))
                 {
-                    return " --apex6-pcm-mode companding";
+                    return string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                        " --apex6-pcm-mode companding --apex6-pcm-companding-gain-percent {0}", companding);
                 }
                 if (string.Equals(mode, "linear", StringComparison.OrdinalIgnoreCase))
                 {
@@ -268,15 +296,22 @@ namespace ApexSenseBridgeTray.Models
                 }
                 if (string.Equals(mode, "normalize", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (refPct <= 0)
+                    if (refPeakAbs16 > 0)
                     {
-                        return " --apex6-pcm-mode original";
+                        return string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                            " --apex6-pcm-mode normalize --apex6-pcm-reference-peak-abs16 {0} --apex6-pcm-target-percent {1} --apex6-pcm-max-gain-percent {2}",
+                            refPeakAbs16, target, maxGain);
                     }
-                    return string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                        " --apex6-pcm-mode normalize --apex6-pcm-reference-percent {0} --apex6-pcm-target-percent {1} --apex6-pcm-max-gain-percent {2}",
-                        refPct, target, maxGain);
+                    if (refPct > 0.0)
+                    {
+                        return string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                            " --apex6-pcm-mode normalize --apex6-pcm-reference-percent {0} --apex6-pcm-target-percent {1} --apex6-pcm-max-gain-percent {2}",
+                            (int)Math.Round(refPct), target, maxGain);
+                    }
+                    // Unmeasured fallback: do not blow up, safely use original default
+                    return string.Empty;
                 }
-                return " --apex6-pcm-mode original";
+                return string.Empty;
             }
         }
 

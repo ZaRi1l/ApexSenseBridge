@@ -238,6 +238,28 @@ namespace ApexSenseBridgeTray.Services
             }
         }
 
+        public string ActiveSessionToken
+        {
+            get
+            {
+                lock (syncLock)
+                {
+                    return activeSession != null ? activeSession.Token : null;
+                }
+            }
+        }
+
+        public string ActiveGameKey
+        {
+            get
+            {
+                lock (syncLock)
+                {
+                    return activeGameKey;
+                }
+            }
+        }
+
         public event Action<string, string> SessionStarted;
         public event Action<string> SessionStopped;
         public event Action<string> SessionError;

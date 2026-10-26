@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <string>
@@ -50,23 +51,20 @@ class Apex6PcmLiveServer {
 public:
     explicit Apex6PcmLiveServer(std::string_view sessionToken = {}) noexcept {
 #ifdef _WIN32
-        std::string name(kApex6PcmLiveGlobalMapping);
+        std::string tokenName;
         if (!sessionToken.empty()) {
-            name += ".";
-            name += sessionToken;
-        }
-        mapping_ = CreateFileMappingA(
-            INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0,
-            static_cast<DWORD>(sizeof(Apex6PcmLiveBlock)), name.c_str());
-        if (mapping_ != NULL) {
-            view_ = static_cast<Apex6PcmLiveBlock*>(
-                MapViewOfFile(mapping_, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(Apex6PcmLiveBlock)));
-            if (view_ != nullptr) {
-                // Initialize header if freshly created
-                if (view_->magic != 0x50365041) {
-                    *view_ = Apex6PcmLiveBlock{};
-                }
+            tokenName = "Local\\ApexSenseBridge.Session." + std::string(sessionToken) + ".Apex6Pcm";
+            tokenMapping_ = CreateFileMappingA(
+                INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0,
+                static_cast<DWORD>(sizeof(Apex6PcmLiveBlock)), tokenName.c_str());
+            if (tokenMapping_ != NULL) {
+                view_ = static_cast<Apex6PcmLiveBlock*>(
+                    MapViewOfFile(tokenMapping_, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(Apex6PcmLiveBlock)));
             }
+        }
+        // Tokenless CLI sessions are not available to the Tray measurement UI.
+        if (view_ != nullptr && view_->magic != 0x50365041) {
+            *view_ = Apex6PcmLiveBlock{};
         }
 #endif
     }
@@ -77,9 +75,9 @@ public:
             UnmapViewOfFile(view_);
             view_ = nullptr;
         }
-        if (mapping_ != NULL) {
-            CloseHandle(mapping_);
-            mapping_ = NULL;
+        if (tokenMapping_ != NULL) {
+            CloseHandle(tokenMapping_);
+            tokenMapping_ = NULL;
         }
 #endif
     }
@@ -88,7 +86,9 @@ public:
                     std::uint16_t rawLeft16, std::uint16_t rawRight16,
                     std::uint8_t outLeft8, std::uint8_t outRight8,
                     std::uint8_t channels, bool quadraphonic,
-                    bool hasActiveDrops, unsigned clippedCount) noexcept {
+                    std::uint64_t totalActiveDrops,
+                    std::uint64_t totalProcessedSamples,
+                    std::uint64_t totalClippedSamples) noexcept {
 #ifdef _WIN32
         if (view_ == nullptr) return;
 
@@ -106,6 +106,9 @@ public:
             // Check for new measurement generation/start
             if (view_->sessionGenerationEcho != view_->measurementGeneration) {
                 view_->sessionGenerationEcho = view_->measurementGeneration;
+                initialActiveDrops_ = previousActiveDrops_;
+                initialProcessedSamples_ = previousProcessedSamples_;
+                initialClippedSamples_ = previousClippedSamples_;
                 view_->measuredLeftPeak16 = 0;
                 view_->measuredRightPeak16 = 0;
                 view_->measuredMaxPeak16 = 0;
@@ -129,22 +132,28 @@ public:
 
             if (left16 > 0 || right16 > 0) {
                 view_->measuredActiveBlocks++;
-            } else {
+            } else if (totalProcessedSamples > previousProcessedSamples_) {
                 view_->measuredSilentBlocks++;
             }
 
-            if (hasActiveDrops) view_->measuredDroppedBlocks++;
-            view_->measuredClippedSamples += clippedCount;
-            view_->measuredProcessedSamples += 8; // 8 samples per channel block
+            view_->measuredDroppedBlocks = static_cast<std::uint32_t>(
+                totalActiveDrops >= initialActiveDrops_ ? totalActiveDrops - initialActiveDrops_ : 0);
+            view_->measuredProcessedSamples = static_cast<std::uint32_t>(
+                totalProcessedSamples >= initialProcessedSamples_ ? totalProcessedSamples - initialProcessedSamples_ : 0);
+            view_->measuredClippedSamples = static_cast<std::uint32_t>(
+                totalClippedSamples >= initialClippedSamples_ ? totalClippedSamples - initialClippedSamples_ : 0);
 
             if (measurementStartedTicks_ > 0) {
                 view_->measuredElapsedMs = GetTickCount64() - measurementStartedTicks_;
             }
         }
+        previousActiveDrops_ = totalActiveDrops;
+        previousProcessedSamples_ = totalProcessedSamples;
+        previousClippedSamples_ = totalClippedSamples;
 #else
         (void)left16; (void)right16; (void)rawLeft16; (void)rawRight16;
         (void)outLeft8; (void)outRight8; (void)channels; (void)quadraphonic;
-        (void)hasActiveDrops; (void)clippedCount;
+        (void)totalActiveDrops; (void)totalProcessedSamples; (void)totalClippedSamples;
 #endif
     }
 
@@ -158,9 +167,15 @@ public:
 
 private:
 #ifdef _WIN32
-    HANDLE mapping_ = NULL;
+    HANDLE tokenMapping_ = NULL;
     Apex6PcmLiveBlock* view_ = nullptr;
     ULONGLONG measurementStartedTicks_ = 0;
+    std::uint64_t previousActiveDrops_ = 0;
+    std::uint64_t previousProcessedSamples_ = 0;
+    std::uint64_t previousClippedSamples_ = 0;
+    std::uint64_t initialActiveDrops_ = 0;
+    std::uint64_t initialProcessedSamples_ = 0;
+    std::uint64_t initialClippedSamples_ = 0;
 #endif
 };
 

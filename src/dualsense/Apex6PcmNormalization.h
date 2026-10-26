@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -43,6 +44,7 @@ struct Apex6PcmConfig {
     unsigned targetPercent = 90;
     unsigned maxGainPercent = 400;
     unsigned legacyGainPercent = 100;
+    unsigned compandingGainPercent = 100;
 };
 
 struct Apex6PcmScalingState {
@@ -68,8 +70,10 @@ public:
         case Apex6PcmMode::Original:
             return static_cast<std::int8_t>(static_cast<std::int32_t>(sample) * 127 / fullScale);
 
-        case Apex6PcmMode::Companding:
-            return scaleApex6Pcm(sample, config_.legacyGainPercent);
+        case Apex6PcmMode::Companding: {
+            const unsigned gainVal = config_.compandingGainPercent != 100 ? config_.compandingGainPercent : config_.legacyGainPercent;
+            return scaleApex6Pcm(sample, gainVal);
+        }
 
         case Apex6PcmMode::Linear:
         case Apex6PcmMode::Normalize: {
@@ -109,7 +113,8 @@ private:
         }
 
         if (config_.mode == Apex6PcmMode::Companding) {
-            const auto gain = std::clamp(config_.legacyGainPercent, 100U, 200U);
+            const unsigned gainVal = config_.compandingGainPercent != 100 ? config_.compandingGainPercent : config_.legacyGainPercent;
+            const auto gain = std::clamp(gainVal, 100U, 200U);
             state_.requestedGainRatio = static_cast<double>(gain) / 100.0;
             state_.effectiveGainRatio = state_.requestedGainRatio;
             state_.gainLimited = false;

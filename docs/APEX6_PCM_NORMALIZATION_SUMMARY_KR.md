@@ -1,4 +1,10 @@
-# Flydigi APEX 6 Pro 게임별 PCM 진폭 측정·정규화 구현 완료 보고서
+# Flydigi APEX 6 Pro 게임별 PCM 진폭 측정·정규화 초안 보고서
+
+> **검증 주장 정정:** 아래 문서는 `491e366` 작성 당시의 부정확한 완료 보고입니다.
+> Python 재구현 테스트는 실제 C++/WPF 통합 검증이 아니며, "완전 구현", "100% 보존",
+> "전체 수용 기준 통과" 주장은 철회합니다. 현재 수정 내역과 실제 검증 범위는
+> README의 `APEX 6 PCM correction verification` 및 `docs/APEX6_PCM_CORRECTION_RESULTS_KR.md`를 참조하세요.
+> C++/전체 WPF 빌드 및 실기 검증은 아직 완료되지 않았습니다.
 
 - 구현 완료일: 2026-10-26
 - 대상 브랜치: `stable`
