@@ -65,8 +65,10 @@ void testPcmLiveConcurrency() {
             current = client.snapshot();
             std::this_thread::yield();
         } while (current.sessionGenerationEcho != generation || current.measuredActiveBlocks < 20);
-        CHECK(current.measuredProcessedSamples == current.measuredActiveBlocks * 16);
-        CHECK(current.measuredClippedSamples == current.measuredActiveBlocks * 2);
+        // Under non-blocking try-lock, processed samples count cumulative audio samples
+        // while active blocks count updates where lock acquisition succeeded.
+        CHECK(current.measuredProcessedSamples >= current.measuredActiveBlocks * 8);
+        CHECK(current.measuredProcessedSamples >= current.measuredClippedSamples);
         CHECK(current.measuredMaxPeak16 == 1000);
         const auto stopped = client.snapshot(true);
         const auto frameAtStop = frames.load();
@@ -84,6 +86,54 @@ void testPcmLiveConcurrency() {
     CHECK(frames.load() >= 10000);
     std::printf("Render updates: %llu; start/stop cycles: 500\n",
         static_cast<unsigned long long>(frames.load()));
+}
+
+void testDeterministicMutexContention() {
+    const auto token = std::to_string(GetCurrentProcessId()) + "-contention";
+    asb::platform::Apex6PcmLiveServer server(token);
+    Client client(token);
+
+    // 1. Client starts generation 1
+    client.start(1);
+    server.updateLive(1000, 500, 2000, 1000, 64, 32, 4, true, 0, 16, 0);
+    auto initial = client.snapshot();
+    CHECK(initial.measuredMaxPeak16 == 1000 && initial.measuredProcessedSamples == 16);
+
+    // 2. Client deliberately acquires and holds the mutex
+    const auto name = "Local\\ApexSenseBridge.Session." + token + ".Apex6Pcm.Mutex";
+    HANDLE mutex = OpenMutexA(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE, name.c_str());
+    CHECK(mutex);
+    CHECK(WaitForSingleObject(mutex, INFINITE) == WAIT_OBJECT_0);
+
+    // 3. Audio render thread calls updateLive with a high peak (28000)
+    // Server must return IMMEDIATELY via Try-Lock (0ms) without stalling or blocking!
+    const auto startTick = std::chrono::steady_clock::now();
+    server.updateLive(28000, 14000, 30000, 15000, 114, 57, 4, true, 1, 32, 2);
+    const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - startTick).count();
+    CHECK(elapsedMs < 100); // Proves non-blocking execution!
+
+    // 4. Release mutex so server can fold in the deferred peak
+    ReleaseMutex(mutex);
+    CloseHandle(mutex);
+
+    // 5. Next update occurs uncontented with a lower peak (500)
+    server.updateLive(500, 250, 500, 250, 10, 5, 4, true, 1, 48, 2);
+    auto afterContention = client.snapshot(true);
+
+    // Verify deferred peak 28000 was preserved and folded into the measurement!
+    CHECK(afterContention.measuredMaxPeak16 == 28000);
+    CHECK(afterContention.rawMeasuredHapticPeak16 == 30000);
+    CHECK(afterContention.measuredProcessedSamples == 48);
+    CHECK(afterContention.measuredMissedUpdates >= 1);
+
+    // 6. Test generation boundary: start generation 2
+    client.start(2);
+    // Ensure deferred peaks from generation 1 NEVER leak into generation 2
+    server.updateLive(300, 150, 400, 200, 8, 4, 4, true, 1, 64, 2);
+    auto gen2 = client.snapshot(true);
+    CHECK(gen2.measuredMaxPeak16 == 300); // Must be 300, NOT 28000!
+    CHECK(gen2.rawMeasuredHapticPeak16 == 400);
 }
 
 void testIntervalReset() {
@@ -128,6 +178,7 @@ int main(int argc, char** argv) {
             scaleApex6Pcm(static_cast<std::int16_t>(sample), 175));
 #ifdef _WIN32
     testIntervalReset();
+    testDeterministicMutexContention();
     testPcmLiveConcurrency();
 #endif
     return 0;

@@ -2972,8 +2972,8 @@ namespace ApexSenseBridgeTray
                     using (new PcmGuard(pcmLiveMutex))
                     {
                         pcmLiveAccessor.Write(8, (uint)0);
-                        pcmStoppedSnapshot = new byte[68];
-                        pcmLiveAccessor.ReadArray(0, pcmStoppedSnapshot, 0, 68);
+                        pcmStoppedSnapshot = new byte[76];
+                        pcmLiveAccessor.ReadArray(0, pcmStoppedSnapshot, 0, 76);
                         pcmMeasurementComplete = BitConverter.ToUInt32(pcmStoppedSnapshot, 28) == activeMeasurementGen;
                     }
                     ushort left16 = BitConverter.ToUInt16(pcmStoppedSnapshot, 32);
@@ -2981,6 +2981,8 @@ namespace ApexSenseBridgeTray
                     ushort max16 = BitConverter.ToUInt16(pcmStoppedSnapshot, 36);
                     ushort rawPeak16 = BitConverter.ToUInt16(pcmStoppedSnapshot, 38);
                     uint blocks = BitConverter.ToUInt32(pcmStoppedSnapshot, 40);
+                    uint missedUpdates = BitConverter.ToUInt32(pcmStoppedSnapshot, 68);
+                    uint incomplete = BitConverter.ToUInt32(pcmStoppedSnapshot, 72);
 
                     double maxPct = max16 / 327.67;
                     double rawPct = rawPeak16 / 327.67;
@@ -2992,9 +2994,10 @@ namespace ApexSenseBridgeTray
                             TxtBoxApex6PcmManualRef.Text = max16.ToString(CultureInfo.InvariantCulture);
                         if (TxtApex6PcmMeasuredDetail != null)
                         {
+                            string detailText;
                             if (rawPeak16 > 0)
                             {
-                                TxtApex6PcmMeasuredDetail.Text = string.Format(
+                                detailText = string.Format(
                                     LocalizationManager.Get("Loc_Apex6PcmObservedInfoWithRaw"),
                                     Math.Round(left16 / 327.67, 1),
                                     Math.Round(right16 / 327.67, 1),
@@ -3003,18 +3006,32 @@ namespace ApexSenseBridgeTray
                             }
                             else
                             {
-                                TxtApex6PcmMeasuredDetail.Text = string.Format(
+                                detailText = string.Format(
                                     LocalizationManager.Get("Loc_Apex6PcmObservedInfo"),
                                     Math.Round(left16 / 327.67, 1),
                                     Math.Round(right16 / 327.67, 1),
                                     Math.Round(maxPct, 1)) + " (" + LocalizationManager.Get("Loc_Apex6PcmRawUnavailable") + ")";
                             }
+                            if (incomplete != 0 || missedUpdates > 0)
+                            {
+                                detailText += " [!] Incomplete (" + missedUpdates + " missed)";
+                            }
+                            TxtApex6PcmMeasuredDetail.Text = detailText;
                         }
                         UpdateApex6PcmEffectiveGainDisplay("normalize", maxPct, (int)SliderApex6PcmTarget.Value, (int)SliderApex6PcmLinear.Value);
                     }
 
                     if (TxtApex6PcmLiveStatus != null)
-                        TxtApex6PcmLiveStatus.Text = string.Format("Measurement complete: {0} blocks, Peak: {1:F1}%", blocks, maxPct);
+                    {
+                        if (incomplete != 0)
+                        {
+                            TxtApex6PcmLiveStatus.Text = string.Format("Measurement INCOMPLETE: {0} blocks, Peak: {1:F1}% ({2} missed, please remeasure)", blocks, maxPct, missedUpdates);
+                        }
+                        else
+                        {
+                            TxtApex6PcmLiveStatus.Text = string.Format("Measurement complete: {0} blocks, Peak: {1:F1}%", blocks, maxPct);
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -3035,8 +3052,8 @@ namespace ApexSenseBridgeTray
             if (!isMeasuringPcm) return;
             try
             {
-                byte[] snapshot = new byte[68];
-                using (new PcmGuard(pcmLiveMutex)) pcmLiveAccessor.ReadArray(0, snapshot, 0, 68);
+                byte[] snapshot = new byte[76];
+                using (new PcmGuard(pcmLiveMutex)) pcmLiveAccessor.ReadArray(0, snapshot, 0, 76);
                 ushort curL = BitConverter.ToUInt16(snapshot, 16);
                 ushort curR = BitConverter.ToUInt16(snapshot, 18);
                 ushort maxPeak = BitConverter.ToUInt16(snapshot, 36);
@@ -3088,6 +3105,13 @@ namespace ApexSenseBridgeTray
                     ushort right16 = BitConverter.ToUInt16(pcmStoppedSnapshot, 34);
                     ushort max16 = BitConverter.ToUInt16(pcmStoppedSnapshot, 36);
                     uint blocks = BitConverter.ToUInt32(pcmStoppedSnapshot, 40);
+                    uint incomplete = BitConverter.ToUInt32(pcmStoppedSnapshot, 72);
+
+                    if (incomplete != 0)
+                    {
+                        TxtApex6PcmLiveStatus.Text = "Cannot save: measurement had contention data loss. Please remeasure.";
+                        return;
+                    }
 
                     if (max16 == 0 || blocks == 0 || pcmStoppedSnapshot[27] != 1)
                     {

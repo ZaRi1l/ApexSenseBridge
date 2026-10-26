@@ -42,10 +42,12 @@ struct Apex6PcmLiveBlock {
     std::uint32_t measuredClippedSamples = 0;
     std::uint32_t measuredProcessedSamples = 0;
     std::uint64_t measuredElapsedMs = 0;
+    std::uint32_t measuredMissedUpdates = 0;
+    std::uint32_t measurementIncomplete = 0;
 };
 #pragma pack(pop)
 
-static_assert(sizeof(Apex6PcmLiveBlock) == 68);
+static_assert(sizeof(Apex6PcmLiveBlock) == 76);
 
 #ifdef _WIN32
 // Non-blocking try-lock for real-time audio render thread; blocking with timeout for client.
@@ -111,27 +113,48 @@ public:
         // Non-blocking try-lock (timeout 0ms): audio render thread never stalls on IPC
         Apex6PcmLock lock(mutex_, 0);
         if (!lock || view_ == nullptr) {
-            deferredLeftPeak_ = (std::max)(deferredLeftPeak_, left16);
-            deferredRightPeak_ = (std::max)(deferredRightPeak_, right16);
-            deferredRawLeftPeak_ = (std::max)(deferredRawLeftPeak_, rawLeft16);
-            deferredRawRightPeak_ = (std::max)(deferredRawRightPeak_, rawRight16);
-            hasDeferredPeaks_ = true;
+            // Under mutex contention, accumulate deferred peaks only if a measurement was active in this session
+            if (activeGeneration_ != 0) {
+                deferredLeftPeak_ = (std::max)(deferredLeftPeak_, left16);
+                deferredRightPeak_ = (std::max)(deferredRightPeak_, right16);
+                deferredRawLeftPeak_ = (std::max)(deferredRawLeftPeak_, rawLeft16);
+                deferredRawRightPeak_ = (std::max)(deferredRawRightPeak_, rawRight16);
+                deferredMissedUpdates_++;
+                hasDeferredPeaks_ = true;
+            }
             return;
         }
 
-        std::uint16_t effLeft16 = left16;
-        std::uint16_t effRight16 = right16;
-        std::uint16_t effRawLeft16 = rawLeft16;
-        std::uint16_t effRawRight16 = rawRight16;
-        if (hasDeferredPeaks_) {
-            effLeft16 = (std::max)(effLeft16, deferredLeftPeak_);
-            effRight16 = (std::max)(effRight16, deferredRightPeak_);
-            effRawLeft16 = (std::max)(effRawLeft16, deferredRawLeftPeak_);
-            effRawRight16 = (std::max)(effRawRight16, deferredRawRightPeak_);
+        const auto activeState = view_->measurementActive; // 0=Inactive, 1=Active, 2=StopPending
+        const auto currentGen = view_->measurementGeneration;
+
+        // Check if measurement generation changed (new start)
+        if (activeState != 0 && view_->sessionGenerationEcho != currentGen) {
+            view_->sessionGenerationEcho = currentGen;
+            activeGeneration_ = currentGen;
+            initialActiveDrops_ = previousActiveDrops_;
+            initialProcessedSamples_ = previousProcessedSamples_;
+            initialClippedSamples_ = previousClippedSamples_;
+            view_->measuredLeftPeak16 = 0;
+            view_->measuredRightPeak16 = 0;
+            view_->measuredMaxPeak16 = 0;
+            view_->rawMeasuredHapticPeak16 = 0;
+            view_->measuredActiveBlocks = 0;
+            view_->measuredSilentBlocks = 0;
+            view_->measuredDroppedBlocks = 0;
+            view_->measuredClippedSamples = 0;
+            view_->measuredProcessedSamples = 0;
+            view_->measuredElapsedMs = 0;
+            view_->measuredMissedUpdates = 0;
+            view_->measurementIncomplete = 0;
+            measurementStartedTicks_ = GetTickCount64();
+
+            // Clear any deferred peaks from previous generation/idle so they NEVER leak across boundaries
             deferredLeftPeak_ = 0;
             deferredRightPeak_ = 0;
             deferredRawLeftPeak_ = 0;
             deferredRawRightPeak_ = 0;
+            deferredMissedUpdates_ = 0;
             hasDeferredPeaks_ = false;
         }
 
@@ -144,25 +167,25 @@ public:
         view_->audioMixChannels = channels;
         view_->audioFormatValid = quadraphonic ? 1 : 0;
 
-        // Check if measurement is active
-        if (view_->measurementActive != 0) {
-            // Check for new measurement generation/start
-            if (view_->sessionGenerationEcho != view_->measurementGeneration) {
-                view_->sessionGenerationEcho = view_->measurementGeneration;
-                initialActiveDrops_ = previousActiveDrops_;
-                initialProcessedSamples_ = previousProcessedSamples_;
-                initialClippedSamples_ = previousClippedSamples_;
-                view_->measuredLeftPeak16 = 0;
-                view_->measuredRightPeak16 = 0;
-                view_->measuredMaxPeak16 = 0;
-                view_->rawMeasuredHapticPeak16 = 0;
-                view_->measuredActiveBlocks = 0;
-                view_->measuredSilentBlocks = 0;
-                view_->measuredDroppedBlocks = 0;
-                view_->measuredClippedSamples = 0;
-                view_->measuredProcessedSamples = 0;
-                view_->measuredElapsedMs = 0;
-                measurementStartedTicks_ = GetTickCount64();
+        // Check if measurement is active in current generation
+        if (activeState != 0 && activeGeneration_ == currentGen) {
+            std::uint16_t effLeft16 = left16;
+            std::uint16_t effRight16 = right16;
+            std::uint16_t effRawLeft16 = rawLeft16;
+            std::uint16_t effRawRight16 = rawRight16;
+
+            if (hasDeferredPeaks_) {
+                effLeft16 = (std::max)(effLeft16, deferredLeftPeak_);
+                effRight16 = (std::max)(effRight16, deferredRightPeak_);
+                effRawLeft16 = (std::max)(effRawLeft16, deferredRawLeftPeak_);
+                effRawRight16 = (std::max)(effRawRight16, deferredRawRightPeak_);
+                view_->measuredMissedUpdates += deferredMissedUpdates_;
+                deferredLeftPeak_ = 0;
+                deferredRightPeak_ = 0;
+                deferredRawLeftPeak_ = 0;
+                deferredRawRightPeak_ = 0;
+                deferredMissedUpdates_ = 0;
+                hasDeferredPeaks_ = false;
             }
 
             if (effLeft16 > view_->measuredLeftPeak16) view_->measuredLeftPeak16 = effLeft16;
@@ -189,11 +212,37 @@ public:
             if (measurementStartedTicks_ > 0) {
                 view_->measuredElapsedMs = GetTickCount64() - measurementStartedTicks_;
             }
+
+            // If UI requested stop pending, mark inactive now that all deferred peaks are flushed
+            if (activeState == 2) {
+                view_->measurementActive = 0;
+                activeGeneration_ = 0;
+            }
+        } else if (activeState == 0) {
+            // If measurement was stopped, but we still held unflushed deferred peaks from that generation,
+            // mark measurement as incomplete in the block.
+            if (hasDeferredPeaks_) {
+                view_->measurementIncomplete = 1;
+                view_->measuredMissedUpdates += deferredMissedUpdates_;
+                deferredLeftPeak_ = 0;
+                deferredRightPeak_ = 0;
+                deferredRawLeftPeak_ = 0;
+                deferredRawRightPeak_ = 0;
+                deferredMissedUpdates_ = 0;
+                hasDeferredPeaks_ = false;
+            }
+            activeGeneration_ = 0;
         }
+
         previousActiveDrops_ = totalActiveDrops;
         previousProcessedSamples_ = totalProcessedSamples;
         previousClippedSamples_ = totalClippedSamples;
 #else
+        (void)left16; (void)right16; (void)rawLeft16; (void)rawRight16;
+        (void)outLeft8; (void)outRight8; (void)channels; (void)quadraphonic;
+        (void)totalActiveDrops; (void)totalProcessedSamples; (void)totalClippedSamples;
+#endif
+    }
         (void)left16; (void)right16; (void)rawLeft16; (void)rawRight16;
         (void)outLeft8; (void)outRight8; (void)channels; (void)quadraphonic;
         (void)totalActiveDrops; (void)totalProcessedSamples; (void)totalClippedSamples;
@@ -221,10 +270,12 @@ private:
     std::uint64_t initialActiveDrops_ = 0;
     std::uint64_t initialProcessedSamples_ = 0;
     std::uint64_t initialClippedSamples_ = 0;
+    std::uint32_t activeGeneration_ = 0;
     std::uint16_t deferredLeftPeak_ = 0;
     std::uint16_t deferredRightPeak_ = 0;
     std::uint16_t deferredRawLeftPeak_ = 0;
     std::uint16_t deferredRawRightPeak_ = 0;
+    std::uint32_t deferredMissedUpdates_ = 0;
     bool hasDeferredPeaks_ = false;
 #endif
 };
