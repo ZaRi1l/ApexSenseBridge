@@ -31,9 +31,13 @@ class PcmWpfContracts(unittest.TestCase):
         self.assertIn('BitConverter.ToUInt32(pcmStoppedSnapshot, 28) != activeMeasurementGen', cs)
         self.assertIn('using (new PcmGuard(pcmLiveMutex))', cs)
         self.assertIn('Apex6PcmLock lock(mutex_)', cpp)
-        self.assertIn('version = 2', cpp)
+        self.assertIn('version = 3', cpp)
         self.assertIn('ReadUInt32(4) == PcmLiveVersion', cs)
-        self.assertIn('PcmLiveBlockSize = 76', cs)
+        self.assertIn('PcmLiveBlockSize = 78', cs)
+        self.assertIn('measuredMotorOutputLeftPeak8', cpp)
+        self.assertIn('measuredMotorOutputRightPeak8', cpp)
+        self.assertIn('PrgApex6PcmOutputL', cs)
+        self.assertIn('PrgApex6PcmOutputR', cs)
 
     def test_release_checks_remain_enabled(self):
         cmake = (ROOT / 'CMakeLists.txt').read_text()
