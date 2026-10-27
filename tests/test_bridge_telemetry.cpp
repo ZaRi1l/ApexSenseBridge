@@ -119,7 +119,7 @@ int main() {
     telemetry.apex6Stats->pcmGainPercent = 150;
     telemetry.apex6Stats->pcmOutputLeftPeak = 48;
     telemetry.apex6Stats->pcmOutputRightPeak = 47;
-    telemetry.apex6Stats->pcmMode = asb::dualsense::Apex6PcmMode::Normalize;
+    telemetry.apex6Stats->pcmMode = asb::dualsense::Apex6PcmMode::Linear;
     telemetry.apex6Stats->pcmReferencePercent = 30;
     telemetry.apex6Stats->pcmReferencePeakAbs16 = 9830;
     telemetry.apex6Stats->pcmTargetPercent = 90;
@@ -153,7 +153,7 @@ int main() {
     assert(apex6Output.str().find("\"haptic_threshold_percent\": 0") != std::string::npos);
     assert(apex6Output.str().find("\"pcm_output_left_peak\": 48") != std::string::npos);
     assert(apex6Output.str().find("\"pcm_output_right_peak\": 47") != std::string::npos);
-    assert(apex6Output.str().find("\"pcm_mode\": \"normalize\"") != std::string::npos);
+    assert(apex6Output.str().find("\"pcm_mode\": \"linear\"") != std::string::npos);
     assert(apex6Output.str().find("\"pcm_reference_percent\": 30") != std::string::npos);
     assert(apex6Output.str().find("\"pcm_reference_peak_abs16\": 9830") != std::string::npos);
     assert(apex6Output.str().find("\"pcm_target_percent\": 90") != std::string::npos);
