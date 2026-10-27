@@ -18,9 +18,9 @@ def test_telemetry_schema():
     "audio_channel_mask": 51,
     "pcm_gain_percent": 100,
     "pcm_gain_policy": "bounded-companding-opt-in",
-    "pcm_mode": "normalize",
-    "pcm_reference_percent": 30,
-    "pcm_reference_peak_abs16": 9830,
+    "pcm_mode": "linear",
+    "pcm_reference_percent": 0,
+    "pcm_reference_peak_abs16": 0,
     "pcm_target_percent": 90,
     "pcm_requested_gain_ratio": 3.0,
     "pcm_effective_gain_ratio": 3.0,
@@ -38,9 +38,9 @@ def test_telemetry_schema():
     data = json.loads(sample_json)
     apex6 = data["apex6"]
 
-    assert apex6["pcm_mode"] == "normalize"
-    assert apex6["pcm_reference_percent"] == 30
-    assert apex6["pcm_reference_peak_abs16"] == 9830
+    assert apex6["pcm_mode"] == "linear"
+    assert apex6["pcm_reference_percent"] == 0
+    assert apex6["pcm_reference_peak_abs16"] == 0
     assert apex6["pcm_target_percent"] == 90
     assert abs(apex6["pcm_requested_gain_ratio"] - 3.0) < 1e-6
     assert abs(apex6["pcm_effective_gain_ratio"] - 3.0) < 1e-6
