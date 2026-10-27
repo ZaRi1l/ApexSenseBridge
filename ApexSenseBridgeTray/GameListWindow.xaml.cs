@@ -2989,7 +2989,11 @@ namespace ApexSenseBridgeTray
             }
             else
             {
+                // Stop is exclusively controlled by the user. Preserve the result
+                // immediately; no separate Save click and no engine policy change.
                 StopPcmMeasurement();
+                if (pcmMeasurementComplete && pcmStoppedSnapshot != null)
+                    OnApex6PcmSaveMeasureClick(sender, e);
             }
         }
 
@@ -3211,7 +3215,8 @@ namespace ApexSenseBridgeTray
             // Saving a reference does not change the selected global/override policy.
 
             settings.SetApex6PcmGameSettings(gameKey, gameSettings);
-            QueuePcmEdit();
+            // A measured peak is informational. Do not resend or restart the PCM effect policy.
+            settings.Save();
 
             UpdateApex6PcmDetailPane();
         }
