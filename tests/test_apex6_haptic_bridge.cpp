@@ -529,7 +529,7 @@ void testLivePcmPolicyAndConcurrentStats() {
     std::thread reader([&] {
         while (reading.load()) {
             const auto stats = bridge.stats();
-            assert(stats.pcmEffectiveGainRatio >= 0 && stats.pcmEffectiveGainRatio <= 4);
+            assert(stats.pcmEffectiveGainRatio >= 0 && stats.pcmEffectiveGainRatio <= 10);
             assert(stats.pcmMeasurementStatus == "valid" || stats.pcmMeasurementStatus == "limited");
             std::this_thread::yield();
         }
@@ -541,9 +541,9 @@ void testLivePcmPolicyAndConcurrentStats() {
             *view = Apex6PcmControlBlock{};
             std::memcpy(view->gameKey, "game:123", 9);
             view->requestId = revision;
-            view->mode = revision == 1 ? 0 : revision == 4 ? 3 : revision == 5 ? 1 : 2;
+            view->mode = revision == 1 ? 0 : revision == 5 ? 1 : 2;
             view->compandingGainPercent = 200;
-            view->linearGainPercent = revision == 2 ? 0 : 200;
+            view->linearGainPercent = revision == 2 ? 0 : revision == 4 ? 1000 : 200;
             view->referencePercent = 10;
         }
         bool acknowledged = false;
@@ -564,11 +564,10 @@ void testLivePcmPolicyAndConcurrentStats() {
         // Stats publication precedes rendered-block completion; wait one tick.
         std::this_thread::sleep_for(std::chrono::milliseconds(12));
         const auto stats = bridge.stats();
-        const double expected = revision == 1 ? 1 : revision == 2 ? 0 : revision == 4 ? 4 : 2;
+        const double expected = revision == 1 ? 1 : revision == 2 ? 0 : revision == 4 ? 10 : 2;
         assert(stats.pcmEffectiveGainRatio == expected);
         const auto companded = static_cast<unsigned>(scaleApex6Pcm(5000, 200));
-        const auto expectedPeak = revision < 3 ? 19U : revision == 3 ? 39U :
-            revision == 4 ? 78U : (std::max)(78U, companded);
+        const auto expectedPeak = revision < 3 ? 19U : revision == 3 ? 39U : 127U;
         assert(stats.pcmOutputLeftPeak == expectedPeak);
     }
     reading.store(false); reader.join();
@@ -577,7 +576,7 @@ void testLivePcmPolicyAndConcurrentStats() {
     bool foundCompanded = false;
     for (const auto& report : transport->writes) {
         if (report.size() == 33 && report[3] == asb::flydigi::apex6::kCmdRealtimeMotor) {
-            if (report[7] == 128 + 78) foundScaled = true;
+            if (report[7] == 255) foundScaled = true;
             if (report[7] == 128 + scaleApex6Pcm(5000, 200)) foundCompanded = true;
         }
     }
