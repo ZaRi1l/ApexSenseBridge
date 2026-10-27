@@ -18,7 +18,7 @@ namespace asb::platform {
 #pragma pack(push, 1)
 struct Apex6PcmLiveBlock {
     std::uint32_t magic = 0x50365041; // "AP6P"
-    std::uint32_t version = 2;
+    std::uint32_t version = 3;
     std::uint32_t measurementActive = 0;
     std::uint32_t measurementGeneration = 0;
 
@@ -44,10 +44,13 @@ struct Apex6PcmLiveBlock {
     std::uint64_t measuredElapsedMs = 0;
     std::uint32_t measuredMissedUpdates = 0;
     std::uint32_t measurementIncomplete = 0;
+    // Cumulative true motor-output peaks after Linear gain and final strength scaling.
+    std::uint8_t measuredMotorOutputLeftPeak8 = 0;
+    std::uint8_t measuredMotorOutputRightPeak8 = 0;
 };
 #pragma pack(pop)
 
-static_assert(sizeof(Apex6PcmLiveBlock) == 76);
+static_assert(sizeof(Apex6PcmLiveBlock) == 78);
 
 #ifdef _WIN32
 // Non-blocking try-lock for real-time audio render thread; blocking with timeout for client.
@@ -119,6 +122,8 @@ public:
                 deferredRightPeak_ = (std::max)(deferredRightPeak_, right16);
                 deferredRawLeftPeak_ = (std::max)(deferredRawLeftPeak_, rawLeft16);
                 deferredRawRightPeak_ = (std::max)(deferredRawRightPeak_, rawRight16);
+                deferredMotorLeftPeak_ = (std::max)(deferredMotorLeftPeak_, outLeft8);
+                deferredMotorRightPeak_ = (std::max)(deferredMotorRightPeak_, outRight8);
                 deferredMissedUpdates_++;
                 hasDeferredPeaks_ = true;
             }
@@ -147,6 +152,8 @@ public:
             view_->measuredElapsedMs = 0;
             view_->measuredMissedUpdates = 0;
             view_->measurementIncomplete = 0;
+            view_->measuredMotorOutputLeftPeak8 = 0;
+            view_->measuredMotorOutputRightPeak8 = 0;
             measurementStartedTicks_ = GetTickCount64();
 
             // Clear any deferred peaks from previous generation/idle so they NEVER leak across boundaries
@@ -154,6 +161,8 @@ public:
             deferredRightPeak_ = 0;
             deferredRawLeftPeak_ = 0;
             deferredRawRightPeak_ = 0;
+            deferredMotorLeftPeak_ = 0;
+            deferredMotorRightPeak_ = 0;
             deferredMissedUpdates_ = 0;
             hasDeferredPeaks_ = false;
         }
@@ -173,12 +182,16 @@ public:
             std::uint16_t effRight16 = right16;
             std::uint16_t effRawLeft16 = rawLeft16;
             std::uint16_t effRawRight16 = rawRight16;
+            std::uint8_t effMotorLeft8 = outLeft8;
+            std::uint8_t effMotorRight8 = outRight8;
 
             if (hasDeferredPeaks_) {
                 effLeft16 = (std::max)(effLeft16, deferredLeftPeak_);
                 effRight16 = (std::max)(effRight16, deferredRightPeak_);
                 effRawLeft16 = (std::max)(effRawLeft16, deferredRawLeftPeak_);
                 effRawRight16 = (std::max)(effRawRight16, deferredRawRightPeak_);
+                effMotorLeft8 = (std::max)(effMotorLeft8, deferredMotorLeftPeak_);
+                effMotorRight8 = (std::max)(effMotorRight8, deferredMotorRightPeak_);
                 view_->measuredMissedUpdates += deferredMissedUpdates_;
                 deferredLeftPeak_ = 0;
                 deferredRightPeak_ = 0;
@@ -188,6 +201,8 @@ public:
                 hasDeferredPeaks_ = false;
             }
 
+            view_->measuredMotorOutputLeftPeak8 = (std::max)(view_->measuredMotorOutputLeftPeak8, effMotorLeft8);
+            view_->measuredMotorOutputRightPeak8 = (std::max)(view_->measuredMotorOutputRightPeak8, effMotorRight8);
             if (effLeft16 > view_->measuredLeftPeak16) view_->measuredLeftPeak16 = effLeft16;
             if (effRight16 > view_->measuredRightPeak16) view_->measuredRightPeak16 = effRight16;
             const auto maxPeak = (std::max)(effLeft16, effRight16);
@@ -270,6 +285,8 @@ private:
     std::uint16_t deferredRightPeak_ = 0;
     std::uint16_t deferredRawLeftPeak_ = 0;
     std::uint16_t deferredRawRightPeak_ = 0;
+    std::uint8_t deferredMotorLeftPeak_ = 0;
+    std::uint8_t deferredMotorRightPeak_ = 0;
     std::uint32_t deferredMissedUpdates_ = 0;
     bool hasDeferredPeaks_ = false;
 #endif
