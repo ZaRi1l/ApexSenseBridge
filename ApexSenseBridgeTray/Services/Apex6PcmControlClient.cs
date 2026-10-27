@@ -41,13 +41,11 @@ namespace ApexSenseBridgeTray.Services
             var key = Encoding.UTF8.GetBytes(NormalizeGameKey(gameKey));
             Array.Copy(key, 0, bytes, 20, key.Length);
             string mode = policy.Mode;
-            if (mode == "normalize" && policy.MeasuredReferencePeakAbs16 <= 0 && policy.MeasuredReferencePercent <= 0)
-                mode = "original";
             using (var writer = new BinaryWriter(new MemoryStream(bytes)))
             {
                 writer.Write(Magic); writer.Write(1u);
                 writer.BaseStream.Position = 276;
-                writer.Write(mode == "linear" ? 2u : mode == "normalize" ? 3u : mode == "companding" ? 1u : 0u);
+                writer.Write(mode == "linear" ? 2u : mode == "companding" ? 1u : 0u);
                 writer.Write((uint)policy.LinearGainPercent);
                 writer.Write((uint)Math.Round(policy.MeasuredReferencePercent));
                 writer.Write((uint)policy.MeasuredReferencePeakAbs16);
