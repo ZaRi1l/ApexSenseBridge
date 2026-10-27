@@ -321,113 +321,46 @@ void testPcmGainCurve() {
 void testApex6PcmNormalization() {
     using namespace asb::dualsense;
 
-    // 1. Original mode bit-identical to legacy quantizer
-    {
-        Apex6PcmScaler scaler(Apex6PcmConfig{Apex6PcmMode::Original});
-        assert(scaler.state().valid && !scaler.state().gainLimited);
-        for (int sample = -32768; sample <= 32767; ++sample) {
-            bool clipped = false;
-            const auto val = scaler.scaleSample(static_cast<std::int16_t>(sample), clipped);
-            assert(!clipped);
-            assert(val == scaleApex6Pcm(static_cast<std::int16_t>(sample), 100));
-        }
-    }
-
-    // 2. Companding mode bit-identical to scaleApex6Pcm
-    {
-        Apex6PcmConfig config{};
-        config.mode = Apex6PcmMode::Companding;
-        config.legacyGainPercent = 150;
-        Apex6PcmScaler scaler(config);
-        assert(scaler.state().valid);
-        for (const auto s : {-32768, -10028, 0, 10028, 32767}) {
-            bool clipped = false;
-            const auto val = scaler.scaleSample(static_cast<std::int16_t>(s), clipped);
-            assert(!clipped);
-            assert(val == scaleApex6Pcm(static_cast<std::int16_t>(s), 150));
-        }
-    }
-
-    // 3. Normalize mode: ref 30% -> target 90% (3.0x scaling)
-    {
-        Apex6PcmConfig config{};
-        config.mode = Apex6PcmMode::Normalize;
-        config.referencePercent = 30;
-        config.targetPercent = 90;
-        Apex6PcmScaler scaler(config);
-        assert(scaler.state().valid);
-        assert(std::abs(scaler.state().effectiveGainRatio - 3.0) < 1e-6);
-        assert(!scaler.state().gainLimited);
-
-        // 10% input (3277) -> ~38 (out of 127, ~30%)
+    // Original and legacy companding remain bit-identical.
+    Apex6PcmScaler original(Apex6PcmConfig{Apex6PcmMode::Original});
+    Apex6PcmConfig legacy{};
+    legacy.mode = Apex6PcmMode::Companding;
+    legacy.compandingGainPercent = 150;
+    legacy.legacyGainPercent = 150;
+    Apex6PcmScaler companding(legacy);
+    for (int sample = -32768; sample <= 32767; ++sample) {
         bool clipped = false;
-        auto val = scaler.scaleSample(3277, clipped);
-        assert(!clipped && val >= 37 && val <= 39);
-
-        // 20% input (6553) -> ~76 (out of 127, ~60%)
-        val = scaler.scaleSample(6553, clipped);
-        assert(!clipped && val >= 75 && val <= 77);
-
-        // 30% input (9830) -> ~114 (out of 127, ~90%)
-        val = scaler.scaleSample(9830, clipped);
-        assert(!clipped && val >= 113 && val <= 115);
-
-        // Negative 30% input
-        val = scaler.scaleSample(-9830, clipped);
-        assert(!clipped && val <= -113 && val >= -115);
-
-        // Over-peak 40% input (13107) -> clipped to 127
-        val = scaler.scaleSample(13107, clipped);
-        assert(clipped && val == 127);
-
-        // INT16_MIN (-32768) -> clipped to -127
-        val = scaler.scaleSample(-32768, clipped);
-        assert(clipped && val == -127);
-    }
-
-    // 4. Missing / zero reference fallback
-    {
-        Apex6PcmConfig config{};
-        config.mode = Apex6PcmMode::Normalize;
-        config.referencePercent = 0;
-        config.targetPercent = 90;
-        Apex6PcmScaler scaler(config);
-        assert(!scaler.state().valid);
-        assert(scaler.state().status == "invalid");
-        assert(scaler.state().effectiveGainRatio == 1.0);
-        bool clipped = false;
-        assert(scaler.scaleSample(10000, clipped) == scaleApex6Pcm(10000, 100));
+        const auto pcm = static_cast<std::int16_t>(sample);
+        assert(original.scaleSample(pcm, clipped) == scaleApex6Pcm(pcm, 100));
+        assert(!clipped);
+        assert(companding.scaleSample(pcm, clipped) == scaleApex6Pcm(pcm, 150));
         assert(!clipped);
     }
 
-    // 5. Max gain limit clamp
-    {
-        Apex6PcmConfig config{};
-        config.mode = Apex6PcmMode::Normalize;
-        config.referencePercent = 10;
-        config.targetPercent = 90;
-        config.maxGainPercent = 400; // clamp to 4.0x
-        Apex6PcmScaler scaler(config);
-        assert(scaler.state().valid);
-        assert(scaler.state().gainLimited);
-        assert(std::abs(scaler.state().effectiveGainRatio - 4.0) < 1e-6);
-        assert(std::abs(scaler.state().requestedGainRatio - 9.0) < 1e-6);
-    }
-
-    // 6. Attenuation (ref 100%, target 90% -> 0.9x)
-    {
-        Apex6PcmConfig config{};
-        config.mode = Apex6PcmMode::Normalize;
-        config.referencePercent = 100;
-        config.targetPercent = 90;
-        Apex6PcmScaler scaler(config);
-        assert(scaler.state().valid);
-        assert(!scaler.state().gainLimited);
-        assert(std::abs(scaler.state().effectiveGainRatio - 0.9) < 1e-6);
+    // Linear scales signed samples uniformly with a safe 8-bit saturation.
+    Apex6PcmConfig linear{};
+    linear.mode = Apex6PcmMode::Linear;
+    for (const unsigned gain : {100U, 400U, 1000U, 1200U}) {
+        linear.linearGainPercent = gain;
+        Apex6PcmScaler scaler(linear);
+        const auto effective = gain > 1000 ? 10.0 : gain / 100.0;
+        assert(std::abs(scaler.state().effectiveGainRatio - effective) < 1e-9);
         bool clipped = false;
-        const auto val = scaler.scaleSample(32767, clipped);
-        assert(!clipped && val == 114);
+        assert(scaler.scaleSample(0, clipped) == 0 && !clipped);
+        const auto mid = scaler.scaleSample(1000, clipped);
+        assert(mid > 0 && !clipped);
+        assert(scaler.scaleSample(-1000, clipped) == -mid && !clipped);
+        assert(scaler.scaleSample(32767, clipped) == 127);
+        if (effective > 1.0) assert(clipped);
+        assert(scaler.scaleSample(-32768, clipped) == -127);
+        if (effective > 1.0) assert(clipped);
     }
+    linear.linearGainPercent = 1000;
+    Apex6PcmScaler maxGain(linear);
+    bool clipped = false;
+    assert(maxGain.scaleSample(5000, clipped) == 127 && clipped);
+    assert(maxGain.scaleSample(-5000, clipped) == -127 && clipped);
+    assert(maxGain.scaleSample(100, clipped) > 0 && !clipped);
 }
 
 void testApex6EnvelopeThresholdPolicy() {
