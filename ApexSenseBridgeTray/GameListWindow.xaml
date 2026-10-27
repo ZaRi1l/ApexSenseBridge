@@ -755,7 +755,7 @@
                                                                 </StackPanel>
                                                                 <TextBlock Text="{DynamicResource Loc_Apex6PcmLinearGain}" Style="{StaticResource RowLabel}"/>
                                                             </DockPanel>
-                                                            <Slider x:Name="SliderApex6PcmLinear" Style="{StaticResource EffectSlider}" Minimum="0" Maximum="400"
+                                                            <Slider x:Name="SliderApex6PcmLinear" Style="{StaticResource EffectSlider}" Minimum="0" Maximum="1000"
                                                                     TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="OnApex6PcmLinearChanged" Margin="0,4,0,0"/>
                                                         </StackPanel>
                                                     </Border>
@@ -1198,7 +1198,7 @@
                                                                 </StackPanel>
                                                                 <TextBlock Text="{DynamicResource Loc_Apex6PcmLinearGain}" Style="{StaticResource RowLabel}"/>
                                                             </DockPanel>
-                                                            <Slider x:Name="SliderGlobalApex6PcmLinear" Style="{StaticResource EffectSlider}" Minimum="0" Maximum="400"
+                                                            <Slider x:Name="SliderGlobalApex6PcmLinear" Style="{StaticResource EffectSlider}" Minimum="0" Maximum="1000"
                                                                     TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="OnGlobalApex6PcmSettingChanged" Margin="0,4,0,0"/>
                                                         </StackPanel>
                                                         <StackPanel x:Name="PnlGlobalApex6PcmCompanding" Visibility="Collapsed" Margin="0,4,0,0">
