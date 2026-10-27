@@ -748,7 +748,7 @@
                                                         <StackPanel>
                                                             <DockPanel>
                                                                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                                                                    <TextBox x:Name="TxtBoxApex6PcmLinear" Width="40" Height="22" Background="#1E293B" Foreground="#38BDF8"
+                                                                    <TextBox x:Name="TxtBoxApex6PcmLinear" Width="60" Height="22" Background="#1E293B" Foreground="#38BDF8"
                                                                              BorderBrush="#334155" BorderThickness="1" TextAlignment="Right" FontSize="11" Padding="2,1"
                                                                              KeyDown="OnApex6PcmLinearTextKeyDown" LostFocus="OnApex6PcmLinearTextLostFocus"/>
                                                                     <TextBlock Text=" %" Style="{StaticResource ValueLabel}" VerticalAlignment="Center"/>
@@ -796,7 +796,7 @@
                                                                 Click="OnApex6PcmStartMeasureClick">
                                                             <TextBlock x:Name="TxtApex6PcmMeasureAction" Text="{DynamicResource Loc_Apex6PcmMeasureStart}" FontSize="11"/>
                                                         </Button>
-                                                        <Button x:Name="BtnApex6PcmSaveMeasure" Grid.Column="1" Style="{StaticResource BtnSecondary}" Margin="3,0,3,0" Height="32"
+                                                        <Button x:Name="BtnApex6PcmSaveMeasure" Grid.Column="1" Visibility="Collapsed" Style="{StaticResource BtnSecondary}" Margin="3,0,3,0" Height="32"
                                                                 Click="OnApex6PcmSaveMeasureClick">
                                                             <TextBlock Text="{DynamicResource Loc_Apex6PcmMeasureSave}" FontSize="11"/>
                                                         </Button>
@@ -1200,7 +1200,7 @@
                                                         <StackPanel x:Name="PnlGlobalApex6PcmLinear" Visibility="Collapsed" Margin="0,4,0,0">
                                                             <DockPanel>
                                                                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                                                                    <TextBox x:Name="TxtBoxGlobalApex6PcmLinear" Width="40" Height="22" Background="#1E293B" Foreground="#38BDF8"
+                                                                    <TextBox x:Name="TxtBoxGlobalApex6PcmLinear" Width="60" Height="22" Background="#1E293B" Foreground="#38BDF8"
                                                                              BorderBrush="#334155" BorderThickness="1" TextAlignment="Right" FontSize="11" Padding="2,1"
                                                                              KeyDown="OnGlobalApex6PcmLinearTextKeyDown" LostFocus="OnGlobalApex6PcmLinearTextLostFocus"/>
                                                                     <TextBlock Text=" %" Style="{StaticResource ValueLabel}" VerticalAlignment="Center"/>
