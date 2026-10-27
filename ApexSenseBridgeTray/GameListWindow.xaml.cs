@@ -2872,6 +2872,9 @@ namespace ApexSenseBridgeTray
             var gameSettings = settings.GetApex6PcmGameSettings(game.Normalized);
             if (gameSettings == null) gameSettings = new Apex6PcmGameSettings();
 
+            // A manual gain edit activates this game's saved Linear PCM override.
+            gameSettings.UseGlobal = false;
+            gameSettings.Mode = "linear";
             gameSettings.LinearGainPercent = (int)SliderApex6PcmLinear.Value;
             if (TxtBoxApex6PcmLinear != null) TxtBoxApex6PcmLinear.Text = gameSettings.LinearGainPercent.ToString(CultureInfo.InvariantCulture);
             settings.SetApex6PcmGameSettings(game.Normalized, gameSettings);
