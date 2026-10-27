@@ -834,7 +834,7 @@ internal static class TrayLearningTests
             "The original Companding feature must remain compatible.");
 
         TestApex6PcmManualReferenceAndPolicy();
-        Assert(serializer.Deserialize<TraySettings>("{\\"AutoDetectGames\\":true}").GetApex6PcmGlobal().Mode == "original",
+        Assert(serializer.Deserialize<TraySettings>(@"{""AutoDetectGames"":true}").GetApex6PcmGlobal().Mode == "original",
             "Pre-PCM settings migration failed.");
     }
 
