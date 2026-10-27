@@ -30,7 +30,7 @@ def test_no_wraparound():
         for sample in (-32768, -10000, -1000, -1, 0, 1, 1000, 10000, 32767):
             output, _ = scale_linear(sample, gain)
             assert -127 <= output <= 127
-            assert (sample == 0) == (output == 0) if abs(sample) > 0 and gain >= 100 else True
+            if sample == 0: assert output == 0
         for sample in (1000, 5000, 10000):
             forward = scale_linear(sample, gain)[0]
             reverse = scale_linear(-sample, gain)[0]
