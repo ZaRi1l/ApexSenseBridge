@@ -193,12 +193,12 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
             options.apex6PcmGameKey = std::move(key);
         } else if (value == "--apex6-pcm-mode") {
             if (++i >= argc) {
-                error = "--apex6-pcm-mode requires one of: original, companding, linear, normalize.";
+                error = "--apex6-pcm-mode requires one of: original, companding, linear.";
                 return false;
             }
             const auto mode = asb::dualsense::parseApex6PcmMode(argv[i]);
             if (!mode) {
-                error = "--apex6-pcm-mode requires one of: original, companding, linear, normalize.";
+                error = "--apex6-pcm-mode requires one of: original, companding, linear.";
                 return false;
             }
             options.apex6PcmConfig.mode = *mode;
@@ -218,74 +218,6 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
                 options.apex6PcmOptionsExplicit = true;
             } catch (...) {
                 error = "--apex6-pcm-linear-gain-percent requires an integer percentage from 0 to 1000.";
-                return false;
-            }
-        } else if (value == "--apex6-pcm-reference-percent") {
-            if (++i >= argc) {
-                error = "--apex6-pcm-reference-percent requires an integer percentage from 1 to 100.";
-                return false;
-            }
-            try {
-                std::size_t consumed = 0;
-                const auto parsed = std::stoul(argv[i], &consumed);
-                if (consumed != std::string_view(argv[i]).size() || parsed < 1 || parsed > 100 || argv[i][0] == '-') {
-                    throw std::out_of_range("apex6-pcm-reference-percent");
-                }
-                options.apex6PcmConfig.referencePercent = static_cast<unsigned>(parsed);
-                options.apex6PcmOptionsExplicit = true;
-            } catch (...) {
-                error = "--apex6-pcm-reference-percent requires an integer percentage from 1 to 100.";
-                return false;
-            }
-        } else if (value == "--apex6-pcm-target-percent") {
-            if (++i >= argc) {
-                error = "--apex6-pcm-target-percent requires an integer percentage from 1 to 100.";
-                return false;
-            }
-            try {
-                std::size_t consumed = 0;
-                const auto parsed = std::stoul(argv[i], &consumed);
-                if (consumed != std::string_view(argv[i]).size() || parsed < 1 || parsed > 100 || argv[i][0] == '-') {
-                    throw std::out_of_range("apex6-pcm-target-percent");
-                }
-                options.apex6PcmConfig.targetPercent = static_cast<unsigned>(parsed);
-                options.apex6PcmOptionsExplicit = true;
-            } catch (...) {
-                error = "--apex6-pcm-target-percent requires an integer percentage from 1 to 100.";
-                return false;
-            }
-        } else if (value == "--apex6-pcm-max-gain-percent") {
-            if (++i >= argc) {
-                error = "--apex6-pcm-max-gain-percent requires an integer percentage from 100 to 400.";
-                return false;
-            }
-            try {
-                std::size_t consumed = 0;
-                const auto parsed = std::stoul(argv[i], &consumed);
-                if (consumed != std::string_view(argv[i]).size() || parsed < 100 || parsed > 400 || argv[i][0] == '-') {
-                    throw std::out_of_range("apex6-pcm-max-gain-percent");
-                }
-                options.apex6PcmConfig.maxGainPercent = static_cast<unsigned>(parsed);
-                options.apex6PcmOptionsExplicit = true;
-            } catch (...) {
-                error = "--apex6-pcm-max-gain-percent requires an integer percentage from 100 to 400.";
-                return false;
-            }
-        } else if (value == "--apex6-pcm-reference-peak-abs16") {
-            if (++i >= argc) {
-                error = "--apex6-pcm-reference-peak-abs16 requires an integer amplitude from 1 to 32768.";
-                return false;
-            }
-            try {
-                std::size_t consumed = 0;
-                const auto parsed = std::stoul(argv[i], &consumed);
-                if (consumed != std::string_view(argv[i]).size() || parsed < 1 || parsed > 32768 || argv[i][0] == '-') {
-                    throw std::out_of_range("apex6-pcm-reference-peak-abs16");
-                }
-                options.apex6PcmConfig.referencePeakAbs16 = static_cast<unsigned>(parsed);
-                options.apex6PcmOptionsExplicit = true;
-            } catch (...) {
-                error = "--apex6-pcm-reference-peak-abs16 requires an integer amplitude from 1 to 32768.";
                 return false;
             }
         } else if (value == "--apex6-pcm-companding-gain-percent") {
@@ -468,14 +400,10 @@ std::string_view bridgeCommandUsage() noexcept {
            "[--trigger-strength 0..100] [--vibration-strength 0..200] "
            "[--apex6-haptic-gain 100..200] "
            "[--apex6-pcm-game-key UTF8KEY | --apex6-pcm-game-key-hex UTF8HEX] "
-           "[--apex6-pcm-mode original|companding|linear|normalize] "
+           "[--apex6-pcm-mode original|companding|linear] "
            "[--apex6-pcm-linear-gain-percent 0..1000] "
            "[--apex6-pcm-companding-gain-percent 100..200] "
-           "[--apex6-pcm-reference-percent 1..100] "
-           "[--apex6-pcm-reference-peak-abs16 1..32768] "
-           "[--apex6-pcm-target-percent 1..100] "
-           "[--apex6-pcm-max-gain-percent 100..400] "
-           "[--controller-calibration MODEL:TRIGGER:VIBRATION:THRESHOLD:RUMBLE:RGB:GYRO:YAW] "
+            "[--controller-calibration MODEL:TRIGGER:VIBRATION:THRESHOLD:RUMBLE:RGB:GYRO:YAW] "
            "[--apex4-gyro-strength 25..400] "
            "[--apex4-gyro-yaw-strength 25..400] "
            "[--verify-virtual-input] [--touchpad-profile NAME] "
