@@ -71,23 +71,24 @@ updates**, with a 30-second CTest timeout.
 or physical actuator duty. Existing assert-based native suites explicitly undefine
 NDEBUG at their test target only; production builds are unchanged.
 
-PCM IPC version 2 uses a session-specific named mutex for command and snapshot
+PCM IPC version 3 uses a session-specific named mutex for command and snapshot
 isolation. To guarantee real-time audio safety and prevent haptic jitter or deadline
 misses, the audio render thread accesses IPC via a **non-blocking try-lock**
 (`WaitForSingleObject(mutex, 0)`). If the client holds the lock to read a snapshot,
 the audio thread never waits: it folds any peak amplitudes into internal deferred
 storage and commits them on the next cycle. Because drop, clip, and processed-sample
 counters are monotonic cumulative totals, zero counts are lost even under contention.
-On the UI side, Stop and final snapshot copy occur under the mutex, and Save uses
-that frozen snapshot only. Engine and Tray must be rebuilt together; version 1
-mappings are rejected.
+On the UI side, Stop and final snapshot copy occur under the mutex and the result
+is saved automatically. The v3 layout also records cumulative **post-gain** 8-bit
+motor peaks independently of the original 16-bit PCM peaks. Engine and Tray must
+be rebuilt together; earlier IPC versions are rejected.
 
-Manual peak entry has explicit `%` and `abs16` units. `1 abs16` means one sample
-unit, not 1 percent; 0 clears the reference and preserves Original fallback.
-48kHz raw peaks shown by the wizard cover **rendered waveform blocks only** within
-the interval, not every received block or a session-wide maximum. Dropped/stale
-blocks are excluded. Missing or all-zero raw data is shown as unavailable; no
-separate receive-window raw maximum is implemented, and raw peaks never determine gain.
+Per-game Linear gain is set manually from **0–1000% (0–10x)** and is saved to
+Tray preferences; measurements never calculate or change gain. The live meter
+shows original 1kHz peaks, post-gain motor peaks (including when 100% is reached)
+and saturation/clipping counts. The native 8-bit actuator waveform still saturates
+at ±127: 1000% increases smaller samples but cannot exceed the protocol's peak
+amplitude. Abnormal heat or harsh clipping is a reason to lower gain.
 
 ### Hardware / WPF runtime checks still required
 
@@ -96,23 +97,25 @@ separate receive-window raw maximum is implemented, and raw peaks never determin
 2. Start with Original and 100% general strength. Record raw 48kHz (if available),
    pre-gain 1kHz, and protocol output peaks separately. Output amplitude does not
    measure physical motor force. Missing raw data is unavailable, not zero.
-3. Select the active game's canonical entry. Measure, stop, save, and remeasure.
-   The second interval must not retain the first interval's maximum. Switching
-   game, stopping/recovering the session, or closing the window must invalidate
-   the old mapping/results; saving another game's data must be refused.
-4. With global Normalize and Use Global enabled, confirm the saved game's exact
-   abs16 reference is passed; an unmeasured game must retain Original output.
-5. Compare repeatable short scenes in Original, Companding, Linear, Normalize.
-   Check numeric inputs/slider synchronization, restart-only application, common
-   L/R gain, clipping counters and no unintended trigger/ordinary-rumble change.
-   A 30% reference with 90% target means 3x PCM amplitude (±1 output LSB), not
-   a guarantee of three times perceived force. Stop on abnormal noise or heat.
+3. Select the active game's entry, press Measure and observe continuously until
+   explicitly pressing Stop; that action also stores the measurement snapshot.
+   Selecting another item in the game's list must not stop an active engine or
+   meter. Starting another interval resets only that interval's peak counters.
+4. Set a game-specific Linear gain up to 1000%, switch windows without stopping
+   the bridge, and verify the gain survives closing and restarting the Tray.
+   A newly unconfigured game retains original PCM output.
+5. Compare repeatable short scenes in Original, the original Companding option,
+   and manual Linear gain. Verify live application without engine restart,
+   synchronized sliders/number inputs, accurate L/R peaks and clipping counters,
+   with no unintended trigger or ordinary-rumble change. Stop on unusual heat.
 6. Retest APEX 4 and 5 with rumble both enabled and disabled, including active
    global APEX6 PCM policies; their calibration must remain authoritative.
 
 Tray PCM settings/measurement do not apply automatically to Playnite launches.
-No C++ compiler/CMake was available on the correction host; native compilation,
-full WPF build, runtime IPC and hardware acceptance remain unverified there.
+The `.github/workflows/develop-validation.yml` workflow builds the native engine,
+WPF Tray and regression tests on Windows for every `develop` push. A remote CI
+runner cannot verify physical APEX 6 Pro vibration or in-game reconnection; those
+checks still require a real controller.
 
 ## Contents
 
