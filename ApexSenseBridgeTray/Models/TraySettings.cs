@@ -122,11 +122,15 @@ namespace ApexSenseBridgeTray.Models
 
         public void Normalize()
         {
-            // Existing normalized profiles migrate to the manually adjustable Linear mode.
+            // Migrating an old Normalize profile must preserve its saved manual
+            // Linear gain instead of silently inheriting a different global policy.
+            var wasLegacyNormalize = string.Equals(Mode, "normalize", StringComparison.OrdinalIgnoreCase);
             if (string.IsNullOrWhiteSpace(Mode)) Mode = "linear";
             Mode = Mode.Trim().ToLowerInvariant();
             if (Mode != "original" && Mode != "companding" && Mode != "linear")
                 Mode = "linear";
+            if (wasLegacyNormalize || (Mode == "linear" && LinearGainPercent != 100))
+                UseGlobal = false;
             MeasuredReferencePeakAbs16 = Math.Max(0, Math.Min(32768, MeasuredReferencePeakAbs16));
             MeasuredReferencePercent = Math.Max(0.0, Math.Min(100.0, MeasuredReferencePercent));
             TargetPeakPercent = Math.Max(1, Math.Min(100, TargetPeakPercent));
