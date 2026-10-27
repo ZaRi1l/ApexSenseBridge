@@ -14,8 +14,7 @@ namespace asb::dualsense {
 enum class Apex6PcmMode : std::uint8_t {
     Original = 0,
     Companding = 1,
-    Linear = 2,
-    Normalize = 3
+    Linear = 2
 };
 
 [[nodiscard]] constexpr std::string_view apex6PcmModeName(Apex6PcmMode mode) noexcept {
@@ -23,7 +22,6 @@ enum class Apex6PcmMode : std::uint8_t {
     case Apex6PcmMode::Original: return "original";
     case Apex6PcmMode::Companding: return "companding";
     case Apex6PcmMode::Linear: return "linear";
-    case Apex6PcmMode::Normalize: return "normalize";
     }
     return "original";
 }
@@ -32,7 +30,6 @@ enum class Apex6PcmMode : std::uint8_t {
     if (text == "original") return Apex6PcmMode::Original;
     if (text == "companding") return Apex6PcmMode::Companding;
     if (text == "linear") return Apex6PcmMode::Linear;
-    if (text == "normalize") return Apex6PcmMode::Normalize;
     return std::nullopt;
 }
 
@@ -75,8 +72,7 @@ public:
             return scaleApex6Pcm(sample, gainVal);
         }
 
-        case Apex6PcmMode::Linear:
-        case Apex6PcmMode::Normalize: {
+        case Apex6PcmMode::Linear: {
             if (!state_.valid || state_.effectiveGainRatio == 1.0) {
                 return static_cast<std::int8_t>(static_cast<std::int32_t>(sample) * 127 / fullScale);
             }
@@ -133,40 +129,7 @@ private:
             return;
         }
 
-        if (config_.mode == Apex6PcmMode::Normalize) {
-            double refPct = 0.0;
-            if (config_.referencePeakAbs16 > 0) {
-                refPct = static_cast<double>(config_.referencePeakAbs16) / 327.67;
-            } else if (config_.referencePercent > 0) {
-                refPct = static_cast<double>(config_.referencePercent);
-            }
 
-            if (refPct <= 0.0) {
-                state_.requestedGainRatio = 1.0;
-                state_.effectiveGainRatio = 1.0;
-                state_.gainLimited = false;
-                state_.valid = false;
-                state_.status = "invalid";
-                return;
-            }
-
-            const double targetPct = static_cast<double>(std::clamp(config_.targetPercent, 1U, 100U));
-            const double requestedGain = targetPct / refPct;
-            state_.requestedGainRatio = requestedGain;
-
-            const double maxGain = static_cast<double>(std::clamp(config_.maxGainPercent, 100U, 400U)) / 100.0;
-            if (requestedGain > maxGain) {
-                state_.effectiveGainRatio = maxGain;
-                state_.gainLimited = true;
-                state_.valid = true;
-                state_.status = "limited";
-            } else {
-                state_.effectiveGainRatio = (std::max)(0.0, requestedGain);
-                state_.gainLimited = false;
-                state_.valid = true;
-                state_.status = "valid";
-            }
-        }
     }
 
     Apex6PcmConfig config_{};
