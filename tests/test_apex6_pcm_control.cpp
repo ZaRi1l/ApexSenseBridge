@@ -89,7 +89,7 @@ int main() {
         submit(3); view->gameKey[0] = 'X';
         server.applyPending(apply);
         assert(view->status == 3 && applications == 1);
-        submit(4); view->linearGainPercent = 401;
+        submit(4); view->linearGainPercent = 1001;
         server.applyPending(apply);
         assert(view->status == 4 && applications == 1);
         submit(5); view->mode = 3;
