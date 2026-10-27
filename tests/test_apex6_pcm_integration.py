@@ -52,7 +52,8 @@ class ManualPcmIntegration(unittest.TestCase):
 
     def test_ui_selection_does_not_stop_measurement(self):
         gui = self.source("ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs")
-        self.assertIn("UI selection is not a change to the running game session",\n                      self.source("ApexSenseBridgeTray/GameListWindow.xaml.cs"))
+        self.assertIn("UI selection is not a change to the running game session",
+                      self.source("ApexSenseBridgeTray/GameListWindow.xaml.cs"))
         matching = gui.split("private bool PcmSessionMatches()", 1)[1].split("private void DisconnectPcmMeasurement", 1)[0]
         self.assertNotIn("SelectedGame.Normalized", matching)
 
