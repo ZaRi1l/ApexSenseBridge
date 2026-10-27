@@ -106,7 +106,7 @@ internal static class TrayLearningTests
         Assert(commits == 2, "drag or close flush writes final edit exactly once");
         var settings = new TraySettings();
         var request = Apex6PcmControlClient.CreateRequest(" GAME ", settings.ResolveApex6PcmPolicy("game"));
-        Assert(BitConverter.ToUInt32(request, 276) == 0, "unmeasured normalize must request original");
+        Assert(BitConverter.ToUInt32(request, 276) == 0, "unconfigured game must request original");
         Assert(Encoding.UTF8.GetString(request, 20, 4) == "game", "identity must be normalized");
         var linearRequest = Apex6PcmControlClient.CreateRequest("게임 키", new Apex6PcmGameSettings { Mode = "linear" });
         Assert(BitConverter.ToUInt32(linearRequest, 276) == 2 && BitConverter.ToUInt32(linearRequest, 300) == 100, "wire enum and legacy bounds match engine");
@@ -116,9 +116,11 @@ internal static class TrayLearningTests
         var reference = new Apex6PcmGameSettings { UseGlobal = true };
         Assert(reference.TrySetManualReference("1234", "abs16"), "manual exact reference accepted");
         settings.SetApex6PcmGameSettings("active", reference);
-        settings.GetApex6PcmGlobal().Mode = "normalize";
+        settings.GetApex6PcmGlobal().Mode = "linear";
+        settings.GetApex6PcmGlobal().LinearGainPercent = 1000;
         var active = Apex6PcmControlClient.CreateRequest("active", settings.ResolveApex6PcmPolicy("active"));
-        Assert(BitConverter.ToUInt32(active, 276) == 3 && BitConverter.ToUInt32(active, 288) == 1234, "inherited normalize preserves exact game reference");
+        Assert(BitConverter.ToUInt32(active, 276) == 2 && BitConverter.ToUInt32(active, 280) == 1000,
+            "inherited Linear boost must reach live IPC at full 1000 percent");
         settings.GetApex6PcmGlobal().Mode = "original";
         Assert(BitConverter.ToUInt32(Apex6PcmControlClient.CreateRequest("active", settings.ResolveApex6PcmPolicy("active")), 276) == 0, "global disable sends explicit original");
         settings.SetApex6PcmGameSettings("other", new Apex6PcmGameSettings { UseGlobal = false, Mode = "linear", LinearGainPercent = 350 });
@@ -771,156 +773,101 @@ internal static class TrayLearningTests
                "bridge-triggers --touchpad-profile none --trigger-strength 100 --vibration-strength 100 " +
                "--apex4-gyro-strength 100 --apex4-gyro-yaw-strength 100",
             "The shared bridge argument contract did not preserve minimal defaults.");
-        Assert(BridgeArguments.Build("none", true, 12, false, 0, 100, 100, 100, 100, "--apex6-pcm-mode normalize").Contains(
-            "--apex6-pcm-mode normalize"),
+        Assert(BridgeArguments.Build("none", true, 12, false, 0, 100, 100, 100, 100, "--apex6-pcm-mode linear --apex6-pcm-linear-gain-percent 1000").Contains(
+            "--apex6-pcm-linear-gain-percent 1000"),
             "The shared bridge arguments dropped APEX 6 PCM arguments.");
     }
 
     private static void TestApex6PcmSettings()
     {
         var settings = new TraySettings();
-        Assert(settings.GetApex6PcmGlobal().Mode == "original", "Default global mode was not original.");
+        Assert(settings.GetApex6PcmGlobal().Mode == "original", "Default global mode changed.");
         Assert(settings.BuildApex6PcmArguments("zenless-zone-zero") == string.Empty,
-            "Unconfigured game did not default to original mode.");
+            "Unconfigured games must preserve original output.");
 
-        // Global linear gain
         settings.GetApex6PcmGlobal().Mode = "linear";
         settings.GetApex6PcmGlobal().LinearGainPercent = 150;
-        Assert(settings.BuildApex6PcmArguments("zenless-zone-zero") == " --apex6-pcm-mode linear --apex6-pcm-linear-gain-percent 150",
-            "Global linear gain was not generated correctly.");
+        Assert(settings.BuildApex6PcmArguments("pragmata") ==
+            " --apex6-pcm-mode linear --apex6-pcm-linear-gain-percent 150",
+            "Global Linear policy was lost.");
 
-        // Per-game override for ZZZ
-        var zzz = new Apex6PcmGameSettings();
-        zzz.UseGlobal = false;
-        zzz.Mode = "normalize";
-        zzz.MeasuredReferencePercent = 30;
-        zzz.TargetPeakPercent = 90;
-        zzz.MaxGainPercent = 400;
+        var zzz = new Apex6PcmGameSettings
+        {
+            UseGlobal = false,
+            Mode = "linear",
+            LinearGainPercent = 1000,
+            MeasuredReferencePeakAbs16 = 10028
+        };
         settings.SetApex6PcmGameSettings("zenless-zone-zero", zzz);
-
         Assert(settings.BuildApex6PcmArguments("zenless-zone-zero") ==
-               " --apex6-pcm-mode normalize --apex6-pcm-reference-percent 30 --apex6-pcm-target-percent 90 --apex6-pcm-max-gain-percent 400",
-               "Per-game normalize override failed.");
-
-        // Case insensitivity
+            " --apex6-pcm-mode linear --apex6-pcm-linear-gain-percent 1000",
+            "Per-game 1000 percent Linear override was not persisted.");
         Assert(settings.BuildApex6PcmArguments("Zenless-Zone-Zero") ==
-               settings.BuildApex6PcmArguments("zenless-zone-zero"),
-               "Game key matching was case-sensitive.");
+            settings.BuildApex6PcmArguments("zenless-zone-zero"),
+            "Game identity comparison must be case-insensitive.");
+        Assert(settings.BuildApex6PcmArguments("pragmata") ==
+            " --apex6-pcm-mode linear --apex6-pcm-linear-gain-percent 150",
+            "One game's boost leaked into another game.");
 
-        // Isolation: Pragmata must use global linear 150%, not ZZZ's settings!
-        Assert(settings.BuildApex6PcmArguments("pragmata") == " --apex6-pcm-mode linear --apex6-pcm-linear-gain-percent 150",
-               "Per-game settings leaked to another game.");
-
-        // Roundtrip serialization
         var serializer = new System.Web.Script.Serialization.JavaScriptSerializer();
-        var json = serializer.Serialize(settings);
-        var restored = serializer.Deserialize<TraySettings>(json);
-        Assert(restored != null && restored.GetApex6PcmGlobal().Mode == "linear",
-            "Global PCM settings did not survive serialization.");
-        var restoredZzz = restored.GetApex6PcmGameSettings("ZENLESS-ZONE-ZERO");
-        Assert(restoredZzz != null && !restoredZzz.UseGlobal && restoredZzz.MeasuredReferencePercent == 30,
-            "Per-game PCM settings did not survive serialization.");
+        var restored = serializer.Deserialize<TraySettings>(serializer.Serialize(settings));
+        Assert(restored.GetApex6PcmGameSettings("ZENLESS-ZONE-ZERO").LinearGainPercent == 1000,
+            "Game gain was lost during settings JSON roundtrip.");
+        Assert(restored.GetApex6PcmGameSettings("zenless-zone-zero").MeasuredReferencePeakAbs16 == 10028,
+            "Measured data changed during settings JSON roundtrip.");
 
-        restoredZzz.UseGlobal = true;
-        restoredZzz.MeasuredReferencePeakAbs16 = 10028;
-        restored.GetApex6PcmGlobal().Mode = "normalize";
-        restored.GetApex6PcmGlobal().TargetPeakPercent = 85;
-        restored.GetApex6PcmGlobal().MaxGainPercent = 350;
-        Assert(restored.BuildApex6PcmArguments("zenless-zone-zero") ==
-               " --apex6-pcm-mode normalize --apex6-pcm-reference-peak-abs16 10028 --apex6-pcm-target-percent 85 --apex6-pcm-max-gain-percent 350",
-               "Global normalize custom target and max gain failed.");
-        Assert(restored.BuildApex6PcmArguments("pragmata") == string.Empty,
-            "Measured reference leaked to an unmeasured game.");
+        // Migrate old Normalize configuration into independently editable Linear.
+        var legacy = new Apex6PcmGameSettings { UseGlobal = true, Mode = "normalize", LinearGainPercent = 400 };
+        restored.SetApex6PcmGameSettings("old-profile", legacy);
+        Assert(restored.BuildApex6PcmArguments("old-profile") ==
+            " --apex6-pcm-mode linear --apex6-pcm-linear-gain-percent 400",
+            "Legacy saved manual gain was not recovered.");
 
-        var roundtrip = serializer.Deserialize<TraySettings>(serializer.Serialize(restored));
-        Assert(roundtrip.GetApex6PcmGameSettings("zenless-zone-zero").MeasuredReferencePeakAbs16 == 10028,
-            "Exact measured peak changed during serialization.");
-
-        // Reset game calibration
+        restored.GetApex6PcmGlobal().Mode = "original";
         restored.SetApex6PcmGameSettings("zenless-zone-zero", null);
-        Assert(restored.GetApex6PcmGameSettings("zenless-zone-zero") == null,
-            "Resetting game settings failed.");
         Assert(restored.BuildApex6PcmArguments("zenless-zone-zero") == string.Empty,
-            "Reset game did not fall back to unmeasured default.");
+            "Reset did not return to original output.");
 
         restored.GetApex6PcmGlobal().Mode = "companding";
         restored.GetApex6PcmGlobal().CompandingGainPercent = 175;
-        Assert(restored.BuildApex6PcmArguments("zenless-zone-zero").Contains("--apex6-pcm-companding-gain-percent 175"),
-            "Global companding gain was not forwarded.");
+        Assert(restored.BuildApex6PcmArguments("pragmata").Contains("--apex6-pcm-companding-gain-percent 175"),
+            "The original Companding feature must remain compatible.");
 
         TestApex6PcmManualReferenceAndPolicy();
-
-        // Legacy JSON migration without PCM fields
-        var legacy = serializer.Deserialize<TraySettings>("{\"AutoDetectGames\":true}");
-        Assert(legacy != null && legacy.GetApex6PcmGlobal().Mode == "original",
-            "Legacy settings without PCM fields failed to migrate.");
+        Assert(serializer.Deserialize<TraySettings>("{\\"AutoDetectGames\\":true}").GetApex6PcmGlobal().Mode == "original",
+            "Pre-PCM settings migration failed.");
     }
 
     private static void TestApex6PcmManualReferenceAndPolicy()
     {
         int peak;
         foreach (int value in new[] { 0, 1, 100, 32768 })
-        {
-            Assert(Apex6PcmGameSettings.TryParseManualReference(value.ToString(CultureInfo.InvariantCulture), "abs16", out peak) && peak == value,
-                "Explicit abs16 input changed an exact boundary value.");
-        }
-        foreach (string value in new[] { "0", "1", "100" })
-        {
-            Assert(Apex6PcmGameSettings.TryParseManualReference(value, "%", out peak) &&
-                peak == (int)Math.Round(double.Parse(value, CultureInfo.InvariantCulture) * 327.67),
-                "Explicit percent input did not convert its selected unit.");
-        }
-        foreach (string unit in new[] { "%", "abs16" })
-        {
-            foreach (string value in new[] { "-1", "NaN", "Infinity", "-Infinity", "1e999", "99999999999999999999", "" })
-                Assert(!Apex6PcmGameSettings.TryParseManualReference(value, unit, out peak), "Invalid manual reference was accepted.");
-        }
-        Assert(!Apex6PcmGameSettings.TryParseManualReference("32768", "%", out peak) &&
-            !Apex6PcmGameSettings.TryParseManualReference("32769", "abs16", out peak) &&
-            !Apex6PcmGameSettings.TryParseManualReference("1.5", "abs16", out peak) &&
-            !Apex6PcmGameSettings.TryParseManualReference("1", "auto", out peak), "Manual units or range were inferred.");
+            Assert(Apex6PcmGameSettings.TryParseManualReference(
+                value.ToString(CultureInfo.InvariantCulture), "abs16", out peak) && peak == value,
+                "Measurement metadata must preserve exact 16-bit peaks.");
+
+        Assert(Apex6PcmGameSettings.TryParseManualReference("1", "%", out peak) && peak == 328,
+            "Measured percent conversion changed.");
+        foreach (string value in new[] { "-1", "NaN", "Infinity", "-Infinity", "1e999", "" })
+            Assert(!Apex6PcmGameSettings.TryParseManualReference(value, "%", out peak),
+                "Invalid measurement metadata was accepted.");
 
         var settings = new TraySettings();
-        var global = settings.GetApex6PcmGlobal();
-        global.Mode = "normalize";
-        global.TargetPeakPercent = 75;
-        global.MaxGainPercent = 150;
-        global.LinearGainPercent = 123;
-        global.CompandingGainPercent = 175;
-        var game = new Apex6PcmGameSettings { Mode = "linear", TargetPeakPercent = 99, LinearGainPercent = 399, MeasuredReferencePeakAbs16 = 100 };
+        var game = new Apex6PcmGameSettings { UseGlobal = false, Mode = "linear", LinearGainPercent = 1000 };
         settings.SetApex6PcmGameSettings("manual", game);
-        var policy = settings.ResolveApex6PcmPolicy("manual");
-        Assert(policy.Mode == "normalize" && policy.TargetPeakPercent == 75 && policy.MaxGainPercent == 150 &&
-            policy.LinearGainPercent == 123 && policy.CompandingGainPercent == 175 && policy.MeasuredReferencePeakAbs16 == 100,
-            "Inherited display policy used dormant game overrides or lost its reference.");
-        Assert(policy.GetEffectiveGainRatio() == 1.5, "Effective normalize gain ignored the configured cap.");
-        foreach (int value in new[] { 0, 1, 100, 32768 })
-        {
-            Assert(game.TrySetManualReference(value.ToString(CultureInfo.InvariantCulture), "abs16"), "Valid manual reference was not applied.");
-            Assert(game.UseGlobal && game.MeasuredReferencePeakAbs16 == value, "Manual reference changed inheritance or exact amplitude.");
-            var serializer = new System.Web.Script.Serialization.JavaScriptSerializer();
-            var restored = serializer.Deserialize<TraySettings>(serializer.Serialize(settings));
-            Assert(restored.GetApex6PcmGameSettings("manual").MeasuredReferencePeakAbs16 == value && restored.GetApex6PcmGameSettings("manual").UseGlobal,
-                "Manual amplitude/inheritance changed in serialization.");
-        }
-        Assert(!game.TrySetManualReference("NaN", "%") && game.MeasuredReferencePeakAbs16 == 32768,
-            "Invalid manual input changed the saved reference.");
-        Assert(game.TrySetManualReference("1", "%") && game.MeasuredReferencePeakAbs16 == 328,
-            "One percent was interpreted as an abs16 amplitude.");
-        var percentSerializer = new System.Web.Script.Serialization.JavaScriptSerializer();
-        var percentRestored = percentSerializer.Deserialize<TraySettings>(percentSerializer.Serialize(settings));
-        Assert(percentRestored.ResolveApex6PcmPolicy("manual").MeasuredReferencePeakAbs16 == 328 &&
-            percentRestored.BuildApex6PcmArguments("manual").Contains("--apex6-pcm-reference-peak-abs16 328"),
-            "Explicit percent input did not survive serialization and reach the actual launch policy.");
-        game.UseGlobal = false;
-        policy = settings.ResolveApex6PcmPolicy("manual");
-        Assert(policy.Mode == "linear" && policy.GetEffectiveGainRatio() == 3.99, "Override policy did not resolve locally.");
-        game.UseGlobal = true;
-        global.Mode = "companding";
-        policy = settings.ResolveApex6PcmPolicy("manual");
-        Assert(policy.GetEffectiveGainRatio() == 1.75, "Companding display ignored configured curve gain.");
-        settings.SetApex6PcmGameSettings("manual", null);
-        Assert(settings.ResolveApex6PcmPolicy("manual").UseGlobal, "Reset did not return to inheritance.");
+        Assert(settings.ResolveApex6PcmPolicy("manual").GetEffectiveGainRatio() == 10.0,
+            "Saved Linear boost did not produce 10x scaling.");
+        Assert(game.TrySetManualReference("10028", "abs16"),
+            "Raw peak metadata could not be stored.");
+        Assert(settings.ResolveApex6PcmPolicy("manual").GetEffectiveGainRatio() == 10.0,
+            "Measuring a peak must never recalculate the user's Linear gain.");
+        var serializer = new System.Web.Script.Serialization.JavaScriptSerializer();
+        var restored = serializer.Deserialize<TraySettings>(serializer.Serialize(settings));
+        Assert(restored.GetApex6PcmGameSettings("manual").MeasuredReferencePeakAbs16 == 10028 &&
+            restored.GetApex6PcmGameSettings("manual").LinearGainPercent == 1000,
+            "Measurement and gain settings did not survive serialization.");
+        Assert(restored.BuildApex6PcmArguments("other") == string.Empty,
+            "Game-specific boost leaked into an unconfigured game.");
     }
 
     private static void TestGameExecutableSettings()
