@@ -581,7 +581,8 @@ namespace ApexSenseBridgeTray.Models
             catch (Exception ex)
             {
                 System.Diagnostics.Trace.TraceError("ApexSenseBridge settings save failed: " + ex);
-                throw;
+                try { ApexSenseBridgeTray.Common.AppLog.WriteLine("tray.log", "Settings save failed: " + ex.Message); }
+                catch { /* Never crash the game bridge because a diagnostic log is unavailable. */ }
             }
         }
     }
