@@ -47,7 +47,7 @@ namespace ApexSenseBridgeTray.Models
         {
             if (string.IsNullOrWhiteSpace(Mode)) Mode = "original";
             Mode = Mode.Trim().ToLowerInvariant();
-            if (Mode != "original" && Mode != "companding" && Mode != "linear" && Mode != "normalize")
+            if (Mode != "original" && Mode != "companding" && Mode != "linear")
                 Mode = "original";
             LinearGainPercent = Math.Max(0, Math.Min(1000, LinearGainPercent));
             CompandingGainPercent = Math.Max(100, Math.Min(200, CompandingGainPercent));
@@ -75,8 +75,8 @@ namespace ApexSenseBridgeTray.Models
 
         public Apex6PcmGameSettings()
         {
-            UseGlobal = true;
-            Mode = "normalize";
+            UseGlobal = false;
+            Mode = "linear";
             TargetPeakPercent = 90;
             MaxGainPercent = 400;
             LinearGainPercent = 100;
@@ -117,17 +117,16 @@ namespace ApexSenseBridgeTray.Models
         {
             if (Mode == "linear") return LinearGainPercent / 100.0;
             if (Mode == "companding") return CompandingGainPercent / 100.0;
-            double reference = MeasuredReferencePeakAbs16 > 0 ? MeasuredReferencePeakAbs16 / 327.67 : MeasuredReferencePercent;
-            if (Mode != "normalize" || reference <= 0) return 1.0;
-            return Math.Min(TargetPeakPercent / reference, MaxGainPercent / 100.0);
+            return 1.0;
         }
 
         public void Normalize()
         {
-            if (string.IsNullOrWhiteSpace(Mode)) Mode = "normalize";
+            // Existing normalized profiles migrate to the manually adjustable Linear mode.
+            if (string.IsNullOrWhiteSpace(Mode)) Mode = "linear";
             Mode = Mode.Trim().ToLowerInvariant();
-            if (Mode != "original" && Mode != "companding" && Mode != "linear" && Mode != "normalize")
-                Mode = "normalize";
+            if (Mode != "original" && Mode != "companding" && Mode != "linear")
+                Mode = "linear";
             MeasuredReferencePeakAbs16 = Math.Max(0, Math.Min(32768, MeasuredReferencePeakAbs16));
             MeasuredReferencePercent = Math.Max(0.0, Math.Min(100.0, MeasuredReferencePercent));
             TargetPeakPercent = Math.Max(1, Math.Min(100, TargetPeakPercent));
@@ -312,12 +311,6 @@ namespace ApexSenseBridgeTray.Models
                 string mode = policy.Mode;
                 int linear = policy.LinearGainPercent;
                 int companding = policy.CompandingGainPercent;
-                int target = policy.TargetPeakPercent;
-                int maxGain = policy.MaxGainPercent;
-                int refPeakAbs16 = policy.MeasuredReferencePeakAbs16;
-                double refPct = policy.MeasuredReferencePercent;
-                if (refPct <= 0.0 && refPeakAbs16 > 0)
-                    refPct = refPeakAbs16 / 327.67;
 
                 if (string.Equals(mode, "original", StringComparison.OrdinalIgnoreCase))
                 {
@@ -334,23 +327,7 @@ namespace ApexSenseBridgeTray.Models
                     return string.Format(System.Globalization.CultureInfo.InvariantCulture,
                         " --apex6-pcm-mode linear --apex6-pcm-linear-gain-percent {0}", linear);
                 }
-                if (string.Equals(mode, "normalize", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (refPeakAbs16 > 0)
-                    {
-                        return string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                            " --apex6-pcm-mode normalize --apex6-pcm-reference-peak-abs16 {0} --apex6-pcm-target-percent {1} --apex6-pcm-max-gain-percent {2}",
-                            refPeakAbs16, target, maxGain);
-                    }
-                    if (refPct > 0.0)
-                    {
-                        return string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                            " --apex6-pcm-mode normalize --apex6-pcm-reference-percent {0} --apex6-pcm-target-percent {1} --apex6-pcm-max-gain-percent {2}",
-                            (int)Math.Round(refPct), target, maxGain);
-                    }
-                    // Unmeasured fallback: do not blow up, safely use original default
-                    return string.Empty;
-                }
+
                 return string.Empty;
             }
         }
@@ -596,10 +573,15 @@ namespace ApexSenseBridgeTray.Models
                 }
                 string json;
                 lock (this) json = new JavaScriptSerializer().Serialize(this);
-                File.WriteAllText(path, json);
+                var stagingPath = path + ".tmp";
+                File.WriteAllText(stagingPath, json);
+                if (File.Exists(path)) File.Replace(stagingPath, path, null);
+                else File.Move(stagingPath, path);
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Trace.TraceError("ApexSenseBridge settings save failed: " + ex);
+                throw;
             }
         }
     }
