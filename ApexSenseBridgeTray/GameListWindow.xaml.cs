@@ -1828,7 +1828,7 @@ namespace ApexSenseBridgeTray
         private void UpdateDetailPane()
         {
             var game = SelectedGame;
-            if (pcmLiveAccessor != null && !PcmSessionMatches()) DisconnectPcmMeasurement();
+            // UI selection is not a change to the running game session: keep measurement active.
             if (game == null)
             {
                 if (TxtDetailEmpty != null) TxtDetailEmpty.Visibility = Visibility.Visible;
@@ -2497,17 +2497,16 @@ namespace ApexSenseBridgeTray
             public void Dispose() { mutex.ReleaseMutex(); }
         }
 
-        private const int PcmLiveBlockSize = 76;
+        private const int PcmLiveBlockSize = 78;
         private const uint PcmLiveMagic = 0x50365041;
-        private const uint PcmLiveVersion = 2;
+        private const uint PcmLiveVersion = 3;
 
         private bool PcmSessionMatches()
         {
-            return sessionManager != null && SelectedGame != null &&
+            return sessionManager != null &&
                 !string.IsNullOrEmpty(pcmMeasurementToken) &&
                 string.Equals(pcmMeasurementToken, sessionManager.ActiveSessionToken, StringComparison.Ordinal) &&
-                string.Equals(pcmMeasurementGameKey, sessionManager.ActiveGameKey, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(pcmMeasurementGameKey, SelectedGame.Normalized, StringComparison.OrdinalIgnoreCase);
+                string.Equals(pcmMeasurementGameKey, sessionManager.ActiveGameKey, StringComparison.OrdinalIgnoreCase);
         }
 
         private void DisconnectPcmMeasurement()
@@ -3072,6 +3071,8 @@ namespace ApexSenseBridgeTray
                     uint blocks = BitConverter.ToUInt32(pcmStoppedSnapshot, 40);
                     uint missedUpdates = BitConverter.ToUInt32(pcmStoppedSnapshot, 68);
                     uint incomplete = BitConverter.ToUInt32(pcmStoppedSnapshot, 72);
+                    byte boostedLeftPeak8 = pcmStoppedSnapshot[76];
+                    byte boostedRightPeak8 = pcmStoppedSnapshot[77];
 
                     double maxPct = max16 / 327.67;
                     double rawPct = rawPeak16 / 327.67;
@@ -3118,7 +3119,10 @@ namespace ApexSenseBridgeTray
                         }
                         else
                         {
-                            TxtApex6PcmLiveStatus.Text = string.Format("Measurement complete: {0} blocks, Peak: {1:F1}%", blocks, maxPct);
+                            TxtApex6PcmLiveStatus.Text = string.Format(
+                                "Measurement complete: {0} blocks | Original peak {1:F1}% | Amplified L/R peaks {2:F1}% / {3:F1}%{4}",
+                                blocks, maxPct, boostedLeftPeak8 * 100.0 / 127.0, boostedRightPeak8 * 100.0 / 127.0,
+                                boostedLeftPeak8 == 127 || boostedRightPeak8 == 127 ? " | Output reached 100%" : "");
                         }
                     }
                 }
@@ -3147,28 +3151,28 @@ namespace ApexSenseBridgeTray
                 ushort curR = BitConverter.ToUInt16(snapshot, 18);
                 ushort maxPeak = BitConverter.ToUInt16(snapshot, 36);
                 ushort rawMaxPeak = BitConverter.ToUInt16(snapshot, 38);
+                byte outputLeft8 = snapshot[24];
+                byte outputRight8 = snapshot[25];
+                byte maxOutputLeft8 = snapshot[76];
+                byte maxOutputRight8 = snapshot[77];
+                uint clippedSamples = BitConverter.ToUInt32(snapshot, 52);
 
                 double pctL = Math.Min(100.0, curL / 327.67);
                 double pctR = Math.Min(100.0, curR / 327.67);
                 if (PrgApex6PcmLiveL != null) PrgApex6PcmLiveL.Value = pctL;
                 if (PrgApex6PcmLiveR != null) PrgApex6PcmLiveR.Value = pctR;
+                if (PrgApex6PcmOutputL != null) PrgApex6PcmOutputL.Value = outputLeft8 * 100.0 / 127.0;
+                if (PrgApex6PcmOutputR != null) PrgApex6PcmOutputR.Value = outputRight8 * 100.0 / 127.0;
 
                 double maxPct = maxPeak / 327.67;
                 double rawMaxPct = rawMaxPeak / 327.67;
                 if (TxtApex6PcmLiveStatus != null)
                 {
-                    if (rawMaxPeak > 0)
-                    {
-                        TxtApex6PcmLiveStatus.Text = string.Format(
-                            "Measuring... 1kHz Peak: {0:F1}% | 48kHz Raw (rendered blocks only): {1:F1}%",
-                            maxPct, rawMaxPct);
-                    }
-                    else
-                    {
-                        TxtApex6PcmLiveStatus.Text = string.Format(
-                            "Measuring... 1kHz Peak: {0:F1}% ({1})",
-                            maxPct, maxPeak);
-                    }
+                    TxtApex6PcmLiveStatus.Text = string.Format(
+                        CultureInfo.InvariantCulture,
+                        "Measuring... Original peak {0:F1}% | Amplified L/R peak {1:F1}% / {2:F1}% | Clipped samples {3}{4}",
+                        maxPct, maxOutputLeft8 * 100.0 / 127.0, maxOutputRight8 * 100.0 / 127.0,
+                        clippedSamples, (maxOutputLeft8 == 127 || maxOutputRight8 == 127) ? " | 100% reached" : "");
                 }
             }
             catch { }
@@ -3176,14 +3180,14 @@ namespace ApexSenseBridgeTray
 
         private void OnApex6PcmSaveMeasureClick(object sender, RoutedEventArgs e)
         {
-            if (SelectedGame == null || settings == null) return;
+            if (settings == null || string.IsNullOrEmpty(pcmMeasurementGameKey)) return;
             if (!PcmSessionMatches()) { DisconnectPcmMeasurement(); return; }
             if (isMeasuringPcm) StopPcmMeasurement();
             if (!pcmMeasurementComplete || pcmStoppedSnapshot == null ||
                 BitConverter.ToUInt32(pcmStoppedSnapshot, 28) != activeMeasurementGen) return;
 
-            var game = SelectedGame;
-            var gameSettings = settings.GetApex6PcmGameSettings(game.Normalized);
+            var gameKey = pcmMeasurementGameKey;
+            var gameSettings = settings.GetApex6PcmGameSettings(gameKey);
             if (gameSettings == null) gameSettings = new Apex6PcmGameSettings();
 
             if (pcmLiveAccessor != null)
@@ -3227,7 +3231,7 @@ namespace ApexSenseBridgeTray
 
             // Saving a reference does not change the selected global/override policy.
 
-            settings.SetApex6PcmGameSettings(game.Normalized, gameSettings);
+            settings.SetApex6PcmGameSettings(gameKey, gameSettings);
             QueuePcmEdit();
 
             UpdateApex6PcmDetailPane();
