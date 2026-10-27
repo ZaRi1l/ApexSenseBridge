@@ -18,7 +18,6 @@ def test_localization_keys():
         "Loc_Apex6PcmModeOriginal",
         "Loc_Apex6PcmModeCompanding",
         "Loc_Apex6PcmModeLinear",
-        "Loc_Apex6PcmModeNormalize",
         "Loc_Apex6PcmReference",
         "Loc_Apex6PcmTarget",
         "Loc_Apex6PcmLinearGain",
@@ -61,11 +60,11 @@ def test_live_ipc_offsets():
     # uint32: 4 bytes
     # uint16: 2 bytes
     # uint8: 1 byte
-    fmt = "<IIII HHHH BBBB I HHHH IIIIIQ"
-    # 4*4 + 4*2 + 4*1 + 4 + 4*2 + 5*4 + 8
-    # 16 + 8 + 4 + 4 + 8 + 20 + 8 = 68 bytes
+    fmt = "<IIII HHHH BBBB I HHHH IIIIIQ II BB"
     expected_size = struct.calcsize(fmt)
-    print(f"test_live_ipc_offsets: Apex6PcmLiveBlock packed struct size = {expected_size} bytes [PASS]")
+    assert expected_size == 78
+    print("test_live_ipc_offsets: 78-byte packed PCM v3 layout [PASS]")
+
 
 def test_multiplier_formatting():
     def calc_multiplier_text(mode, ref_pct, target_pct, linear_pct):
@@ -75,21 +74,11 @@ def test_multiplier_formatting():
             return "1.00x - 2.00x (Curve)"
         elif mode == "linear":
             return f"{linear_pct / 100.0:.2f}x"
-        elif mode == "normalize":
-            if ref_pct <= 0:
-                return "1.00x (Fallback: unmeasured)"
-            ratio = target_pct / ref_pct
-            if ratio > 4.0:
-                return "4.00x (Capped at 4.00x)"
-            return f"{ratio:.2f}x"
         return "1.00x"
 
     assert calc_multiplier_text("original", 30, 90, 100) == "1.00x"
     assert calc_multiplier_text("linear", 30, 90, 250) == "2.50x"
-    assert calc_multiplier_text("normalize", 30, 90, 100) == "3.00x"
-    assert calc_multiplier_text("normalize", 0, 90, 100) == "1.00x (Fallback: unmeasured)"
-    assert calc_multiplier_text("normalize", 10, 90, 100) == "4.00x (Capped at 4.00x)"
-    assert calc_multiplier_text("normalize", 100, 90, 100) == "0.90x"
+    assert calc_multiplier_text("linear", 30, 90, 1000) == "10.00x"
     print("test_multiplier_formatting: PASS")
 
 def main():
