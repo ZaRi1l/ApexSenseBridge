@@ -79,7 +79,7 @@ public:
         if (std::memcmp(view_->gameKey, gameKey_, sizeof(gameKey_)) != 0) { view_->status = 3; return; }
         if (view_->requestId == appliedId_) { view_->ackId = appliedId_; view_->status = 1; return; }
         if (view_->requestId < appliedId_) { view_->status = 5; return; }
-        if (view_->mode > 3 || view_->linearGainPercent > 400 ||
+        if (view_->mode > 3 || view_->linearGainPercent > 1000 ||
             view_->referencePercent > 100 || view_->referencePeakAbs16 > 32768 ||
             view_->targetPercent < 1 || view_->targetPercent > 100 ||
             view_->maxGainPercent < 100 || view_->maxGainPercent > 400 ||
