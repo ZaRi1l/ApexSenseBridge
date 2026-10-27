@@ -27,11 +27,11 @@ class ManualPcmIntegration(unittest.TestCase):
         settings = self.source("ApexSenseBridgeTray/Models/TraySettings.cs")
         self.assertIn('Mode = "linear";', settings)
         self.assertNotIn('--apex6-pcm-mode normalize', settings)
-        gui = self.source("ApexSenseBridgeTray/GameListWindow.xaml.cs")
+        gui = self.source("ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs")
         self.assertNotIn('Tag = "normalize"', gui)
 
     def test_measurements_do_not_change_gain(self):
-        gui = self.source("ApexSenseBridgeTray/GameListWindow.xaml.cs")
+        gui = self.source("ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs")
         self.assertIn("Saving a reference does not change the selected global/override policy.", gui)
         self.assertIn("private void StopPcmMeasurement()", gui)
         self.assertIn("private void OnPcmLiveTimerTick(", gui)
@@ -40,7 +40,7 @@ class ManualPcmIntegration(unittest.TestCase):
 
     def test_ipc_v3_has_real_amplified_peaks(self):
         native = self.source("src/platform/Apex6PcmLiveMetrics.h")
-        tray = self.source("ApexSenseBridgeTray/GameListWindow.xaml.cs")
+        tray = self.source("ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs")
         self.assertIn("version = 3", native)
         self.assertIn("static_assert(sizeof(Apex6PcmLiveBlock) == 78)", native)
         self.assertIn("PcmLiveBlockSize = 78", tray)
@@ -51,13 +51,13 @@ class ManualPcmIntegration(unittest.TestCase):
         self.assertIn("Clipped samples", tray)
 
     def test_ui_selection_does_not_stop_measurement(self):
-        gui = self.source("ApexSenseBridgeTray/GameListWindow.xaml.cs")
+        gui = self.source("ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs")
         self.assertIn("UI selection is not a change to the running game session", gui)
         matching = gui.split("private bool PcmSessionMatches()", 1)[1].split("private void DisconnectPcmMeasurement", 1)[0]
         self.assertNotIn("SelectedGame.Normalized", matching)
 
     def test_save_and_game_override(self):
-        gui = self.source("ApexSenseBridgeTray/GameListWindow.xaml.cs")
+        gui = self.source("ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs")
         self.assertIn('gameSettings.Mode = "linear";', gui)
         self.assertIn('gameSettings.UseGlobal = false;', gui)
         settings = self.source("ApexSenseBridgeTray/Models/TraySettings.cs")

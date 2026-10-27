@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class PcmWpfContracts(unittest.TestCase):
     def test_event_handlers_and_control_names(self):
         tree = ET.parse(ROOT / 'ApexSenseBridgeTray/GameListWindow.xaml')
-        source = (ROOT / 'ApexSenseBridgeTray/GameListWindow.xaml.cs').read_text(encoding='utf-8-sig')
+        source = (ROOT / 'ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs').read_text(encoding='utf-8-sig')
         names = set()
         for element in tree.iter():
             for key, value in element.attrib.items():
@@ -22,7 +22,7 @@ class PcmWpfContracts(unittest.TestCase):
 
     def test_session_mapping_contract(self):
         cpp = (ROOT / 'src/platform/Apex6PcmLiveMetrics.h').read_text()
-        cs = (ROOT / 'ApexSenseBridgeTray/GameListWindow.xaml.cs').read_text(encoding='utf-8-sig')
+        cs = (ROOT / 'ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs').read_text(encoding='utf-8-sig')
         self.assertIn('Local\\\\ApexSenseBridge.Session.', cpp)
         self.assertIn('Local\\\\ApexSenseBridge.Session.', cs)
         self.assertIn('".Apex6Pcm"', cpp)

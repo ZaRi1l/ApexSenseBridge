@@ -16,7 +16,7 @@ def test_default_and_legacy_migration():
 
 
 def test_game_specific_automatic_save():
-    ui = (ROOT / "ApexSenseBridgeTray/GameListWindow.xaml.cs").read_text(encoding="utf-8")
+    ui = (ROOT / "ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs").read_text(encoding="utf-8")
     start = ui.index("private void OnApex6PcmLinearChanged")
     end = ui.index("private void OnApex6PcmCompandingChanged", start)
     handler = ui[start:end]
@@ -25,7 +25,7 @@ def test_game_specific_automatic_save():
     assert 'gameSettings.LinearGainPercent = (int)SliderApex6PcmLinear.Value;' in handler
     assert 'settings.SetApex6PcmGameSettings(game.Normalized, gameSettings);' in handler
     assert 'QueuePcmEdit();' in handler
-    assert "pcmEdits.Flush()" in ui
+    assert "pcmEdits.Flush()" in ui or "pcmEdits.Flush()" in (ROOT / "ApexSenseBridgeTray/GameListWindow.xaml.cs").read_text(encoding="utf-8")
     assert "settings.Save(); sessionManager?.RefreshPcmPolicy(settings);" in ui
 
 

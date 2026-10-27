@@ -96,6 +96,7 @@
       <DependentUpon>GameListWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Extensions\GameListWindow.PcmExtension.cs" />
     <Compile Include="BugReportWindow.xaml.cs">
       <DependentUpon>BugReportWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
