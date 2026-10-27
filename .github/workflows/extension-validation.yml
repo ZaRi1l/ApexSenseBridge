@@ -46,6 +46,7 @@ jobs:
             'tests/test_apex6_pcm_normalization.py',
             'tests/test_apex6_pcm_integration.py',
             'tests/test_pcm_extension_isolation.py',
+            'tests/test_pcm_focus_session_regression.py',
             'tests/test_bridge_options_apex6_pcm.py',
             'tests/test_pcm_wpf_contract.py',
             'tests/test_tray_pcm_settings.py',
