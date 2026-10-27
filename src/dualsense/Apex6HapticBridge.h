@@ -1,14 +1,12 @@
 #pragma once
 
 #include "core/TriggerEffect.h"
-#include "dualsense/Apex6PcmNormalization.h"
+#include "extensions/Apex6PcmExtension.h"
 #include "dualsense/Apex6TriggerEffect.h"
 #include "dualsense/DualSenseFeedback.h"
 #include "flydigi/Apex5Device.h"
 #include "flydigi/Apex6Protocol.h"
 #include "haptics/HapticProcessor.h"
-#include "platform/Apex6PcmLiveMetrics.h"
-#include "platform/Apex6PcmControl.h"
 
 #include <array>
 #include <atomic>
@@ -199,13 +197,7 @@ private:
     bool routeGrips_ = true;
     unsigned triggerStrengthPercent_ = 100;
     unsigned vibrationStrengthPercent_ = 100;
-    unsigned pcmGainPercent_ = 100;
-    Apex6PcmScaler pcmScaler_{};
-    platform::Apex6PcmLiveServer liveServer_{};
-    platform::Apex6PcmControlServer controlServer_;
-    mutable std::mutex pcmStatsMutex_;
-    Apex6PcmConfig pcmStatsConfig_{};
-    Apex6PcmScalingState pcmStatsState_{};
+    extensions::Apex6PcmExtension pcmExtension_;
     std::atomic_uint pcmAudioChannels_{0};
     std::atomic_bool pcmAudioVerified_{false};
     std::uint64_t triggerSampleOffset_ = 0;

@@ -106,9 +106,7 @@ Apex6HapticBridge::Apex6HapticBridge(flydigi::Apex5Device& device,
                                      std::string_view sessionToken, std::string_view gameKey)
     : device_(device), hapticProcessor_(apex6HapticConfig(config)), routeGrips_(routeGrips),
       triggerStrengthPercent_(triggerStrengthPercent), vibrationStrengthPercent_(vibrationStrengthPercent),
-      pcmGainPercent_(pcmConfig.mode == Apex6PcmMode::Companding ? std::clamp(pcmConfig.legacyGainPercent, 100U, 200U) : 100U),
-      pcmScaler_(pcmConfig), liveServer_(sessionToken), controlServer_(sessionToken, gameKey),
-      pcmStatsConfig_(pcmConfig), pcmStatsState_(pcmScaler_.state()) {}
+      pcmExtension_(pcmConfig, sessionToken, gameKey) {}
 
 Apex6HapticBridge::Apex6HapticBridge(flydigi::Apex5Device& device,
                                      haptics::HapticConfig config,
@@ -419,15 +417,7 @@ flydigi::apex6::MotorBlock Apex6HapticBridge::renderBlock(
     flydigi::apex6::TriggerRoute& route,
     bool& triggerEnabled,
     Clock::time_point now) noexcept {
-    controlServer_.applyPending([this](const Apex6PcmConfig& config) noexcept {
-        std::unique_lock lock(pcmStatsMutex_, std::try_to_lock);
-        if (!lock.owns_lock()) return false;
-        pcmScaler_ = Apex6PcmScaler(config);
-        pcmGainPercent_ = config.mode == Apex6PcmMode::Companding ? config.legacyGainPercent : 100;
-        pcmStatsConfig_ = pcmScaler_.config();
-        pcmStatsState_ = pcmScaler_.state();
-        return true;
-    });
+    pcmExtension_.applyPending();
     flydigi::apex6::MotorBlock output{};
     std::array<std::int8_t, 8> leftTrigger;
     std::array<std::int8_t, 8> rightTrigger;
@@ -514,7 +504,7 @@ flydigi::apex6::MotorBlock Apex6HapticBridge::renderBlock(
     for (std::size_t index = 0; routeGrips_ && index < output.size(); ++index) {
         if (leftPcmActive) {
             bool clipped = false;
-            output[index].leftGrip = pcmScaler_.scaleSample(waveform->left[index], clipped);
+            output[index].leftGrip = pcmExtension_.scale(waveform->left[index], clipped);
             if (clipped) clippedSamplesCount++;
             currentLeftPeak16 = (std::max)(currentLeftPeak16,
                 static_cast<std::uint16_t>(std::abs(static_cast<int>(waveform->left[index]))));
@@ -528,7 +518,7 @@ flydigi::apex6::MotorBlock Apex6HapticBridge::renderBlock(
         }
         if (rightPcmActive) {
             bool clipped = false;
-            output[index].rightGrip = pcmScaler_.scaleSample(waveform->right[index], clipped);
+            output[index].rightGrip = pcmExtension_.scale(waveform->right[index], clipped);
             if (clipped) clippedSamplesCount++;
             currentRightPeak16 = (std::max)(currentRightPeak16,
                 static_cast<std::uint16_t>(std::abs(static_cast<int>(waveform->right[index]))));
@@ -570,7 +560,7 @@ flydigi::apex6::MotorBlock Apex6HapticBridge::renderBlock(
     if (routeGrips_ && rightPcmActive) updateMaximum(pcmOutputRightPeak_, rightPcmOutputPeak);
     const auto blockRawL = waveform && waveform->hasRawMeasurements ? waveform->rawHapticLeftPeak : static_cast<std::uint16_t>(0);
     const auto blockRawR = waveform && waveform->hasRawMeasurements ? waveform->rawHapticRightPeak : static_cast<std::uint16_t>(0);
-    liveServer_.updateLive(
+    pcmExtension_.publish(
         currentLeftPeak16, currentRightPeak16,
         blockRawL, blockRawR,
         static_cast<std::uint8_t>(leftPcmOutputPeak),
@@ -778,16 +768,16 @@ Apex6HapticBridgeStats Apex6HapticBridge::stats() const noexcept {
     result.waveformTotalAgeUs = waveformTotalAgeUs_.load(std::memory_order_relaxed);
     result.waveformActiveRendered = waveformActiveRendered_.load(std::memory_order_relaxed);
     {
-        std::lock_guard lock(pcmStatsMutex_);
-        result.pcmGainPercent = pcmGainPercent_;
-        result.pcmMode = pcmStatsConfig_.mode;
-        result.pcmReferencePercent = pcmStatsConfig_.referencePercent;
-        result.pcmReferencePeakAbs16 = pcmStatsConfig_.referencePeakAbs16;
-        result.pcmTargetPercent = pcmStatsConfig_.targetPercent;
-        result.pcmRequestedGainRatio = pcmStatsState_.requestedGainRatio;
-        result.pcmEffectiveGainRatio = pcmStatsState_.effectiveGainRatio;
-        result.pcmGainLimited = pcmStatsState_.gainLimited;
-        result.pcmMeasurementStatus = pcmStatsState_.status;
+        const auto pcm = pcmExtension_.snapshot();
+        result.pcmGainPercent = pcm.legacyGainPercent;
+        result.pcmMode = pcm.config.mode;
+        result.pcmReferencePercent = pcm.config.referencePercent;
+        result.pcmReferencePeakAbs16 = pcm.config.referencePeakAbs16;
+        result.pcmTargetPercent = pcm.config.targetPercent;
+        result.pcmRequestedGainRatio = pcm.state.requestedGainRatio;
+        result.pcmEffectiveGainRatio = pcm.state.effectiveGainRatio;
+        result.pcmGainLimited = pcm.state.gainLimited;
+        result.pcmMeasurementStatus = pcm.state.status;
     }
     result.pcmOutputClippedSamples = pcmOutputClippedSamples_.load(std::memory_order_relaxed);
     result.pcmProcessedSamples = pcmProcessedSamples_.load(std::memory_order_relaxed);
