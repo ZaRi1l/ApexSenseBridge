@@ -219,11 +219,12 @@ void testIntervalReset() {
     client.start(1);
     server.updateLive(9830, 1000, 20000, 1000, 114, 12, 4, true, 6, 176, 3);
     auto first = client.snapshot(true);
-    CHECK(first.version == 2 && first.measuredProcessedSamples == 16);
+    CHECK(first.version == 3 && first.measuredProcessedSamples == 16);
     CHECK(first.measuredClippedSamples == 1 && first.measuredDroppedBlocks == 1);
     server.updateLive(32767, 0, 32767, 0, 127, 0, 4, true, 7, 184, 4);
     auto stopped = client.snapshot();
     CHECK(stopped.measuredMaxPeak16 == 9830 && stopped.rawMeasuredHapticPeak16 == 20000);
+    CHECK(stopped.measuredMotorOutputLeftPeak8 == 114 && stopped.measuredMotorOutputRightPeak8 == 12);
     client.start(2);
     // No render between start/stop: old generation must not be saved as a new result.
     CHECK(client.snapshot(true).sessionGenerationEcho != 2);
@@ -232,6 +233,7 @@ void testIntervalReset() {
     auto next = client.snapshot(true);
     CHECK(next.measuredMaxPeak16 == 1000 && next.rawMeasuredHapticPeak16 == 1000);
     CHECK(next.measuredProcessedSamples == 8 && next.measuredDroppedBlocks == 0);
+    CHECK(next.measuredMotorOutputLeftPeak8 == 12);
 }
 #endif
 
@@ -239,12 +241,15 @@ int main(int argc, char** argv) {
     if (argc > 1 && std::strcmp(argv[1], "--check-failure") == 0) CHECK(false);
     using namespace asb::dualsense;
     Apex6PcmConfig config{};
-    config.mode = Apex6PcmMode::Normalize;
-    config.referencePeakAbs16 = 10028;
+    config.mode = Apex6PcmMode::Linear;
+    config.linearGainPercent = 300;
     Apex6PcmScaler precise(config);
-    CHECK(std::abs(precise.state().effectiveGainRatio - 32767.0 * .9 / 10028) < 1e-10);
+    CHECK(std::abs(precise.state().effectiveGainRatio - 3.0) < 1e-10);
     bool clipped = false;
-    CHECK(precise.scaleSample(10028, clipped) == 114 && !clipped);
+    CHECK(precise.scaleSample(10028, clipped) == 117 && !clipped);
+    config.linearGainPercent = 1000;
+    Apex6PcmScaler maxGain(config);
+    CHECK(maxGain.scaleSample(10028, clipped) == 127 && clipped);
     config.mode = Apex6PcmMode::Companding;
     config.compandingGainPercent = 175;
     Apex6PcmScaler curve(config);
