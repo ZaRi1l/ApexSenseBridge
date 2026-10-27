@@ -2233,7 +2233,7 @@ namespace ApexSenseBridgeTray
             PnlHapticThresholdSettings.Visibility = SliderVibrationThreshold.IsEnabled ? Visibility.Visible : Visibility.Collapsed;
             if (PnlApex6PcmGlobalSettings != null)
             {
-                PnlApex6PcmGlobalSettings.Visibility = lastControllerStatus == "apex6" ? Visibility.Visible : Visibility.Collapsed;
+                PnlApex6PcmGlobalSettings.Visibility = Visibility.Collapsed; // Manual gain is configured per game.
                 if (lastControllerStatus == "apex6")
                 {
                     UpdateGlobalApex6PcmUi();
@@ -2542,8 +2542,7 @@ namespace ApexSenseBridgeTray
                     CmbGlobalApex6PcmMode.Items.Add(new ComboBoxItem { Content = LocalizationManager.Get("Loc_Apex6PcmModeOriginal"), Tag = "original" });
                     CmbGlobalApex6PcmMode.Items.Add(new ComboBoxItem { Content = LocalizationManager.Get("Loc_Apex6PcmModeCompanding"), Tag = "companding" });
                     CmbGlobalApex6PcmMode.Items.Add(new ComboBoxItem { Content = LocalizationManager.Get("Loc_Apex6PcmModeLinear"), Tag = "linear" });
-                    CmbGlobalApex6PcmMode.Items.Add(new ComboBoxItem { Content = LocalizationManager.Get("Loc_Apex6PcmModeNormalize"), Tag = "normalize" });
-                }
+                    }
 
                 foreach (ComboBoxItem item in CmbGlobalApex6PcmMode.Items)
                 {
@@ -2657,15 +2656,14 @@ namespace ApexSenseBridgeTray
                 bool useGlobal = policy.UseGlobal;
                 if (ChkApex6PcmUseGlobal != null) ChkApex6PcmUseGlobal.IsChecked = useGlobal;
                 if (PnlApex6PcmCustomControls != null) PnlApex6PcmCustomControls.Visibility = Visibility.Visible;
-                if (CmbApex6PcmMode != null) CmbApex6PcmMode.IsEnabled = !useGlobal;
+                if (CmbApex6PcmMode != null) CmbApex6PcmMode.IsEnabled = false;
                 if (RowApex6PcmTarget != null) RowApex6PcmTarget.IsEnabled = !useGlobal;
-                if (RowApex6PcmLinear != null) RowApex6PcmLinear.IsEnabled = !useGlobal;
+                if (RowApex6PcmLinear != null) RowApex6PcmLinear.IsEnabled = true;
                 if (RowApex6PcmCompanding != null) RowApex6PcmCompanding.IsEnabled = !useGlobal;
 
                 if (CmbApex6PcmMode != null && CmbApex6PcmMode.Items.Count == 0)
                 {
-                    CmbApex6PcmMode.Items.Add(new ComboBoxItem { Content = LocalizationManager.Get("Loc_Apex6PcmModeNormalize"), Tag = "normalize" });
-                    CmbApex6PcmMode.Items.Add(new ComboBoxItem { Content = LocalizationManager.Get("Loc_Apex6PcmModeLinear"), Tag = "linear" });
+                                        CmbApex6PcmMode.Items.Add(new ComboBoxItem { Content = LocalizationManager.Get("Loc_Apex6PcmModeLinear"), Tag = "linear" });
                     CmbApex6PcmMode.Items.Add(new ComboBoxItem { Content = LocalizationManager.Get("Loc_Apex6PcmModeCompanding"), Tag = "companding" });
                     CmbApex6PcmMode.Items.Add(new ComboBoxItem { Content = LocalizationManager.Get("Loc_Apex6PcmModeOriginal"), Tag = "original" });
                 }
@@ -2722,8 +2720,8 @@ namespace ApexSenseBridgeTray
                     }
                 }
 
-                RowApex6PcmMaxGain.IsEnabled = !useGlobal;
-                RowApex6PcmMaxGain.Visibility = currentMode == "normalize" ? Visibility.Visible : Visibility.Collapsed;
+                RowApex6PcmMaxGain.IsEnabled = false;
+                RowApex6PcmMaxGain.Visibility = Visibility.Collapsed;
                 SliderApex6PcmMaxGain.Value = policy.MaxGainPercent;
                 TxtBoxApex6PcmMaxGain.Text = policy.MaxGainPercent.ToString(CultureInfo.InvariantCulture);
                 int targetPct = policy.TargetPeakPercent;
@@ -2737,10 +2735,10 @@ namespace ApexSenseBridgeTray
                 int companding = policy.CompandingGainPercent;
                 SliderApex6PcmCompanding.Value = companding;
                 TxtBoxApex6PcmCompanding.Text = companding.ToString(CultureInfo.InvariantCulture);
-                RowApex6PcmCompanding.Visibility = currentMode == "companding" ? Visibility.Visible : Visibility.Collapsed;
+                RowApex6PcmCompanding.Visibility = Visibility.Collapsed;
                 if (RowApex6PcmReference != null) RowApex6PcmReference.Visibility = Visibility.Visible;
-                if (RowApex6PcmTarget != null) RowApex6PcmTarget.Visibility = currentMode == "normalize" ? Visibility.Visible : Visibility.Collapsed;
-                if (RowApex6PcmLinear != null) RowApex6PcmLinear.Visibility = currentMode == "linear" ? Visibility.Visible : Visibility.Collapsed;
+                if (RowApex6PcmTarget != null) RowApex6PcmTarget.Visibility = Visibility.Collapsed;
+                if (RowApex6PcmLinear != null) RowApex6PcmLinear.Visibility = Visibility.Visible;
 
                 UpdateApex6PcmEffectiveGainDisplay(currentMode, refPct, targetPct, linearPct);
             }
@@ -2770,26 +2768,7 @@ namespace ApexSenseBridgeTray
             {
                 TxtApex6PcmEffectiveGain.Text = string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:F2}x", linearPct / 100.0);
             }
-            else if (string.Equals(mode, "normalize", StringComparison.OrdinalIgnoreCase))
-            {
-                if (refPct <= 0)
-                {
-                    TxtApex6PcmEffectiveGain.Text = "1.00x (Fallback: unmeasured)";
-                }
-                else
-                {
-                    double ratio = (double)targetPct / refPct;
-                    double cap = policy.MaxGainPercent / 100.0;
-                    if (ratio > cap)
-                    {
-                        TxtApex6PcmEffectiveGain.Text = string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:F2}x (Capped at {0:F2}x)", policy.GetEffectiveGainRatio());
-                    }
-                    else
-                    {
-                        TxtApex6PcmEffectiveGain.Text = string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:F2}x", ratio);
-                    }
-                }
-            }
+
         }
 
         private void OnApex6PcmUseGlobalRowClick(object sender, MouseButtonEventArgs e)
@@ -2827,7 +2806,7 @@ namespace ApexSenseBridgeTray
             var gameSettings = settings.GetApex6PcmGameSettings(game.Normalized);
             if (gameSettings == null) gameSettings = new Apex6PcmGameSettings();
 
-            gameSettings.Mode = (item.Tag as string) ?? "normalize";
+            gameSettings.Mode = (item.Tag as string) ?? "linear";
             settings.SetApex6PcmGameSettings(game.Normalized, gameSettings);
             QueuePcmEdit();
 
