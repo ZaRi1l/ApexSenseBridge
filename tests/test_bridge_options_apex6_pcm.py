@@ -1,206 +1,109 @@
-"""
-Test CLI parsing and validation logic for APEX 6 PCM normalization options.
-Simulates the exact rules implemented in BridgeOptions.cpp:
-1. --apex6-pcm-mode original|companding|linear|normalize
-2. --apex6-pcm-linear-gain-percent 0..400
-3. --apex6-pcm-reference-percent 1..100
-4. --apex6-pcm-target-percent 1..100
-5. --apex6-pcm-max-gain-percent 100..400
-6. Conflict with legacy --apex6-haptic-gain
-7. Requirement for --rumble
-"""
+"""Manual APEX 6 PCM CLI contract: Original, Companding, and Linear (0..1000%)."""
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
 
 class BridgeOptionsParser:
     def __init__(self):
         self.route_rumble = False
         self.apex6_haptic_gain_percent = 100
         self.apex6_haptic_gain_explicit = False
-
         self.apex6_pcm_mode = "original"
-        self.apex6_pcm_mode_explicit = False
         self.apex6_pcm_linear_gain = 100
-        self.apex6_pcm_reference_percent = 0
-        self.apex6_pcm_target_percent = 90
-        self.apex6_pcm_max_gain = 400
         self.apex6_pcm_options_explicit = False
 
-    def parse(self, args: list[str]) -> tuple[bool, str]:
+    def parse(self, args):
         i = 0
         while i < len(args):
             val = args[i]
             if val == "--rumble":
                 self.route_rumble = True
-            elif val == "--apex6-haptic-gain":
-                self.apex6_haptic_gain_explicit = True
                 i += 1
-                if i >= len(args):
-                    return False, "--apex6-haptic-gain requires an integer percentage from 100 to 200."
-                try:
-                    num = int(args[i])
-                    if num < 100 or num > 200 or args[i].startswith("-"):
-                        raise ValueError()
-                    self.apex6_haptic_gain_percent = num
-                except ValueError:
-                    return False, "--apex6-haptic-gain requires an integer percentage from 100 to 200."
-            elif val == "--apex6-pcm-mode":
-                self.apex6_pcm_mode_explicit = True
-                self.apex6_pcm_options_explicit = True
-                i += 1
-                if i >= len(args):
-                    return False, "--apex6-pcm-mode requires one of: original, companding, linear, normalize."
-                mode = args[i].lower()
-                if mode not in ("original", "companding", "linear", "normalize"):
-                    return False, "--apex6-pcm-mode requires one of: original, companding, linear, normalize."
-                self.apex6_pcm_mode = mode
-            elif val == "--apex6-pcm-linear-gain-percent":
-                self.apex6_pcm_options_explicit = True
-                i += 1
-                if i >= len(args):
-                    return False, "--apex6-pcm-linear-gain-percent requires an integer percentage from 0 to 400."
-                try:
-                    num = int(args[i])
-                    if num < 0 or num > 400 or args[i].startswith("-"):
-                        raise ValueError()
-                    self.apex6_pcm_linear_gain = num
-                except ValueError:
-                    return False, "--apex6-pcm-linear-gain-percent requires an integer percentage from 0 to 400."
-            elif val == "--apex6-pcm-reference-percent":
-                self.apex6_pcm_options_explicit = True
-                i += 1
-                if i >= len(args):
-                    return False, "--apex6-pcm-reference-percent requires an integer percentage from 1 to 100."
-                try:
-                    num = int(args[i])
-                    if num < 1 or num > 100 or args[i].startswith("-"):
-                        raise ValueError()
-                    self.apex6_pcm_reference_percent = num
-                except ValueError:
-                    return False, "--apex6-pcm-reference-percent requires an integer percentage from 1 to 100."
-            elif val == "--apex6-pcm-target-percent":
-                self.apex6_pcm_options_explicit = True
-                i += 1
-                if i >= len(args):
-                    return False, "--apex6-pcm-target-percent requires an integer percentage from 1 to 100."
-                try:
-                    num = int(args[i])
-                    if num < 1 or num > 100 or args[i].startswith("-"):
-                        raise ValueError()
-                    self.apex6_pcm_target_percent = num
-                except ValueError:
-                    return False, "--apex6-pcm-target-percent requires an integer percentage from 1 to 100."
-            elif val == "--apex6-pcm-max-gain-percent":
-                self.apex6_pcm_options_explicit = True
-                i += 1
-                if i >= len(args):
-                    return False, "--apex6-pcm-max-gain-percent requires an integer percentage from 100 to 400."
-                try:
-                    num = int(args[i])
-                    if num < 100 or num > 400 or args[i].startswith("-"):
-                        raise ValueError()
-                    self.apex6_pcm_max_gain = num
-                except ValueError:
-                    return False, "--apex6-pcm-max-gain-percent requires an integer percentage from 100 to 400."
+                continue
+            if val not in ("--apex6-haptic-gain", "--apex6-pcm-mode",
+                           "--apex6-pcm-linear-gain-percent",
+                           "--apex6-pcm-companding-gain-percent"):
+                return False, "Unknown bridge-triggers option: " + val
             i += 1
-
-        # Validation rules:
+            if i >= len(args):
+                return False, "Missing value for " + val
+            raw = args[i]
+            if val == "--apex6-pcm-mode":
+                if raw not in ("original", "linear", "companding"):
+                    return False, "Invalid APEX 6 PCM mode"
+                self.apex6_pcm_mode = raw
+                self.apex6_pcm_options_explicit = True
+            else:
+                try:
+                    if raw.startswith("-") or not raw.isdigit():
+                        raise ValueError()
+                    gain = int(raw)
+                except ValueError:
+                    return False, "Invalid integer gain"
+                if val == "--apex6-pcm-linear-gain-percent":
+                    if not 0 <= gain <= 1000:
+                        return False, "Linear gain must be 0..1000"
+                    self.apex6_pcm_linear_gain = gain
+                    self.apex6_pcm_options_explicit = True
+                elif val == "--apex6-pcm-companding-gain-percent":
+                    if not 100 <= gain <= 200:
+                        return False, "Companding gain must be 100..200"
+                    self.apex6_pcm_options_explicit = True
+                else:
+                    if not 100 <= gain <= 200:
+                        return False, "Legacy gain must be 100..200"
+                    self.apex6_haptic_gain_explicit = True
+                    self.apex6_haptic_gain_percent = gain
+            i += 1
         if self.apex6_haptic_gain_explicit and self.apex6_pcm_options_explicit:
             return False, "Cannot combine legacy --apex6-haptic-gain with --apex6-pcm-* options."
-
-        if self.apex6_haptic_gain_explicit and not self.route_rumble:
-            return False, "--apex6-haptic-gain requires --rumble."
-
-        if self.apex6_pcm_options_explicit and not self.route_rumble:
+        if (self.apex6_haptic_gain_explicit or
+            (self.apex6_pcm_options_explicit and self.apex6_pcm_mode != "original")) and not self.route_rumble:
             return False, "--apex6-pcm-* options require --rumble."
-
-        # Map legacy option to mode
         if self.apex6_haptic_gain_explicit:
             self.apex6_pcm_mode = "companding"
-
         return True, ""
 
-def test_valid_normalize_args():
-    parser = BridgeOptionsParser()
-    ok, err = parser.parse([
-        "--rumble",
-        "--apex6-pcm-mode", "normalize",
-        "--apex6-pcm-reference-percent", "30",
-        "--apex6-pcm-target-percent", "90",
-        "--apex6-pcm-max-gain-percent", "400"
-    ])
-    assert ok, f"Failed: {err}"
-    assert parser.apex6_pcm_mode == "normalize"
-    assert parser.apex6_pcm_reference_percent == 30
-    assert parser.apex6_pcm_target_percent == 90
-    assert parser.apex6_pcm_max_gain == 400
-    print("test_valid_normalize_args: PASS")
 
-def test_valid_linear_args():
-    parser = BridgeOptionsParser()
-    ok, err = parser.parse([
-        "--rumble",
-        "--apex6-pcm-mode", "linear",
-        "--apex6-pcm-linear-gain-percent", "250"
-    ])
-    assert ok, f"Failed: {err}"
-    assert parser.apex6_pcm_mode == "linear"
-    assert parser.apex6_pcm_linear_gain == 250
-    print("test_valid_linear_args: PASS")
-
-def test_legacy_option_backward_compat():
-    parser = BridgeOptionsParser()
-    ok, err = parser.parse([
-        "--rumble",
-        "--apex6-haptic-gain", "150"
-    ])
-    assert ok, f"Failed: {err}"
-    assert parser.apex6_pcm_mode == "companding"
-    assert parser.apex6_haptic_gain_percent == 150
-    print("test_legacy_option_backward_compat: PASS")
-
-def test_conflict_rejected():
-    parser = BridgeOptionsParser()
-    ok, err = parser.parse([
-        "--rumble",
-        "--apex6-haptic-gain", "150",
-        "--apex6-pcm-mode", "normalize"
-    ])
-    assert not ok
-    assert "Cannot combine legacy --apex6-haptic-gain" in err
-    print("test_conflict_rejected: PASS")
-
-def test_missing_rumble_rejected():
-    parser = BridgeOptionsParser()
-    ok, err = parser.parse([
-        "--apex6-pcm-mode", "normalize"
-    ])
-    assert not ok
-    assert "require --rumble" in err
-    print("test_missing_rumble_rejected: PASS")
-
-def test_range_errors():
-    for flag, bad_val in [
-        ("--apex6-pcm-mode", "turbo"),
-        ("--apex6-pcm-linear-gain-percent", "500"),
-        ("--apex6-pcm-reference-percent", "0"),
-        ("--apex6-pcm-reference-percent", "101"),
-        ("--apex6-pcm-target-percent", "0"),
-        ("--apex6-pcm-target-percent", "101"),
-        ("--apex6-pcm-max-gain-percent", "50"),
-        ("--apex6-pcm-max-gain-percent", "450"),
-    ]:
+def test_linear_limits():
+    for gain in (0, 100, 400, 1000):
         parser = BridgeOptionsParser()
-        ok, err = parser.parse(["--rumble", flag, bad_val])
-        assert not ok, f"Expected failure for {flag} {bad_val}"
-    print("test_range_errors: PASS")
+        ok, reason = parser.parse(["--rumble", "--apex6-pcm-mode", "linear",
+                                   "--apex6-pcm-linear-gain-percent", str(gain)])
+        assert ok, reason
+        assert parser.apex6_pcm_linear_gain == gain
+    for gain in ("-1", "1001", "999999999999999999999999"):
+        assert not BridgeOptionsParser().parse(
+            ["--rumble", "--apex6-pcm-linear-gain-percent", gain])[0]
 
-def main():
-    test_valid_normalize_args()
-    test_valid_linear_args()
-    test_legacy_option_backward_compat()
-    test_conflict_rejected()
-    test_missing_rumble_rejected()
-    test_range_errors()
-    print("\nALL BRIDGE OPTIONS APEX6 PCM TESTS PASSED.")
+
+def test_removed_normalize_rejected():
+    for opts in (["--rumble", "--apex6-pcm-mode", "normalize"],
+                 ["--rumble", "--apex6-pcm-reference-percent", "30"],
+                 ["--rumble", "--apex6-pcm-target-percent", "90"]):
+        assert not BridgeOptionsParser().parse(opts)[0]
+
+
+def test_legacy_unchanged():
+    parser = BridgeOptionsParser()
+    assert parser.parse(["--rumble", "--apex6-haptic-gain", "150"])[0]
+    assert parser.apex6_pcm_mode == "companding"
+    assert not BridgeOptionsParser().parse([
+        "--rumble", "--apex6-haptic-gain", "150", "--apex6-pcm-mode", "linear"])[0]
+
+
+def test_source_contract():
+    source = (ROOT / "src/cli/BridgeOptions.cpp").read_text(encoding="utf-8")
+    assert "parsed > 1000" in source
+    assert "0..1000" in source
+    assert 'original|companding|linear]' in source
+    assert '"--apex6-pcm-reference-percent"' not in source
+
 
 if __name__ == "__main__":
-    main()
+    test_linear_limits()
+    test_removed_normalize_rejected()
+    test_legacy_unchanged()
+    test_source_contract()
+    print("PASS: manual PCM CLI, legacy compatibility, and 1000% boundaries")
