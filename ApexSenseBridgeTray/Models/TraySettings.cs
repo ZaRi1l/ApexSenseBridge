@@ -49,7 +49,7 @@ namespace ApexSenseBridgeTray.Models
             Mode = Mode.Trim().ToLowerInvariant();
             if (Mode != "original" && Mode != "companding" && Mode != "linear" && Mode != "normalize")
                 Mode = "original";
-            LinearGainPercent = Math.Max(0, Math.Min(400, LinearGainPercent));
+            LinearGainPercent = Math.Max(0, Math.Min(1000, LinearGainPercent));
             CompandingGainPercent = Math.Max(100, Math.Min(200, CompandingGainPercent));
             TargetPeakPercent = Math.Max(1, Math.Min(100, TargetPeakPercent));
             MaxGainPercent = Math.Max(100, Math.Min(400, MaxGainPercent));
@@ -132,7 +132,7 @@ namespace ApexSenseBridgeTray.Models
             MeasuredReferencePercent = Math.Max(0.0, Math.Min(100.0, MeasuredReferencePercent));
             TargetPeakPercent = Math.Max(1, Math.Min(100, TargetPeakPercent));
             MaxGainPercent = Math.Max(100, Math.Min(400, MaxGainPercent));
-            LinearGainPercent = Math.Max(0, Math.Min(400, LinearGainPercent));
+            LinearGainPercent = Math.Max(0, Math.Min(1000, LinearGainPercent));
             CompandingGainPercent = Math.Max(100, Math.Min(200, CompandingGainPercent));
             if (string.IsNullOrWhiteSpace(ObservedStatus)) ObservedStatus = "none";
         }
