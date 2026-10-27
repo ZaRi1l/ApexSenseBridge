@@ -569,18 +569,19 @@ namespace ApexSenseBridgeTray.Models
         {
             try
             {
-                var path = SettingsFilePath;
-                var dir = Path.GetDirectoryName(path);
-                if (!Directory.Exists(dir))
+                // Serialize AND write under one lock so overlapping UI/autodetect
+                // saves cannot overwrite or race the same staging file.
+                lock (this)
                 {
-                    Directory.CreateDirectory(dir);
+                    var path = SettingsFilePath;
+                    var dir = Path.GetDirectoryName(path);
+                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    var json = new JavaScriptSerializer().Serialize(this);
+                    var stagingPath = path + ".tmp";
+                    File.WriteAllText(stagingPath, json);
+                    if (File.Exists(path)) File.Replace(stagingPath, path, null);
+                    else File.Move(stagingPath, path);
                 }
-                string json;
-                lock (this) json = new JavaScriptSerializer().Serialize(this);
-                var stagingPath = path + ".tmp";
-                File.WriteAllText(stagingPath, json);
-                if (File.Exists(path)) File.Replace(stagingPath, path, null);
-                else File.Move(stagingPath, path);
             }
             catch (Exception ex)
             {
