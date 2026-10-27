@@ -205,19 +205,19 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
             options.apex6PcmOptionsExplicit = true;
         } else if (value == "--apex6-pcm-linear-gain-percent") {
             if (++i >= argc) {
-                error = "--apex6-pcm-linear-gain-percent requires an integer percentage from 0 to 400.";
+                error = "--apex6-pcm-linear-gain-percent requires an integer percentage from 0 to 1000.";
                 return false;
             }
             try {
                 std::size_t consumed = 0;
                 const auto parsed = std::stoul(argv[i], &consumed);
-                if (consumed != std::string_view(argv[i]).size() || parsed > 400 || argv[i][0] == '-') {
+                if (consumed != std::string_view(argv[i]).size() || parsed > 1000 || argv[i][0] == '-') {
                     throw std::out_of_range("apex6-pcm-linear-gain");
                 }
                 options.apex6PcmConfig.linearGainPercent = static_cast<unsigned>(parsed);
                 options.apex6PcmOptionsExplicit = true;
             } catch (...) {
-                error = "--apex6-pcm-linear-gain-percent requires an integer percentage from 0 to 400.";
+                error = "--apex6-pcm-linear-gain-percent requires an integer percentage from 0 to 1000.";
                 return false;
             }
         } else if (value == "--apex6-pcm-reference-percent") {
@@ -469,7 +469,7 @@ std::string_view bridgeCommandUsage() noexcept {
            "[--apex6-haptic-gain 100..200] "
            "[--apex6-pcm-game-key UTF8KEY | --apex6-pcm-game-key-hex UTF8HEX] "
            "[--apex6-pcm-mode original|companding|linear|normalize] "
-           "[--apex6-pcm-linear-gain-percent 0..400] "
+           "[--apex6-pcm-linear-gain-percent 0..1000] "
            "[--apex6-pcm-companding-gain-percent 100..200] "
            "[--apex6-pcm-reference-percent 1..100] "
            "[--apex6-pcm-reference-peak-abs16 1..32768] "
