@@ -197,5 +197,60 @@ int main() {
     assert(!parse({"--controller-calibration", "apex4:100:100:12:1:0:100:100",
                    "--controller-calibration", "apex4:100:100:12:1:0:100:100"}).succeeded);
 
+    // APEX 6 manual Linear gain: full range 0..1000, no Normalize.
+    const auto pcmLinear = parse({
+        "--rumble",
+        "--apex6-pcm-mode", "linear",
+        "--apex6-pcm-linear-gain-percent", "1000"});
+    assert(pcmLinear.succeeded);
+    assert(pcmLinear.options.apex6PcmConfig.mode == asb::dualsense::Apex6PcmMode::Linear);
+    assert(pcmLinear.options.apex6PcmConfig.linearGainPercent == 1000);
+    assert(pcmLinear.options.apex6PcmOptionsExplicit);
+    assert(!parse({"--rumble", "--apex6-pcm-mode", "normalize"}).succeeded);
+
+    // Mutual exclusion: cannot mix legacy --apex6-haptic-gain with new options
+    const auto pcmConflict = parse({
+        "--rumble",
+        "--apex6-haptic-gain", "150",
+        "--apex6-pcm-mode", "linear"});
+    assert(!pcmConflict.succeeded);
+    assert(pcmConflict.error.find("Cannot combine legacy --apex6-haptic-gain") != std::string::npos);
+
+    // Requires --rumble
+    assert(!parse({"--apex6-pcm-mode", "linear", "--apex6-pcm-linear-gain-percent", "200"}).succeeded);
+    assert(parse({"--apex6-pcm-mode", "original"}).succeeded);
+    auto trayPcm = parse({"--apex6-pcm-mode", "linear", "--apex6-pcm-linear-gain-percent", "1000",
+        "--controller-calibration", "apex4:100:100:12:1:0:100:100",
+        "--controller-calibration", "apex5:100:100:12:0:0:100:100",
+        "--controller-calibration", "apex6:100:100:0:1:0:100:100"});
+    assert(trayPcm.succeeded && trayPcm.options.apex6PcmConfig.linearGainPercent == 1000);
+    for (const auto model : {"apex4", "apex5", "apex6"}) {
+        auto options = trayPcm.options;
+        std::string error;
+        assert(asb::cli::applyControllerCalibration(options, model, error));
+        assert(options.routeRumble == (std::string_view(model) != "apex5"));
+    }
+    auto disabledPcm = parse({"--apex6-pcm-mode", "linear",
+        "--controller-calibration", "apex6:100:100:0:0:0:100:100"});
+    assert(disabledPcm.succeeded);
+    assert(asb::cli::applyControllerCalibration(disabledPcm.options, "apex6", calibrationError));
+    assert(!disabledPcm.options.routeRumble);
+    const auto saturated = parse({"--rumble", "--apex6-pcm-mode", "linear",
+        "--apex6-pcm-linear-gain-percent", "1000"});
+    assert(saturated.succeeded && saturated.options.apex6PcmConfig.linearGainPercent == 1000);
+    const auto curve = parse({"--rumble", "--apex6-pcm-mode", "companding",
+        "--apex6-pcm-companding-gain-percent", "175"});
+    assert(curve.succeeded && curve.options.apex6PcmConfig.compandingGainPercent == 175);
+
+    // Invalid parameters
+    assert(!parse({"--rumble", "--apex6-pcm-mode", "invalid"}).succeeded);
+    assert(!parse({"--rumble", "--apex6-pcm-reference-percent", "0"}).succeeded);
+    assert(!parse({"--rumble", "--apex6-pcm-reference-percent", "101"}).succeeded);
+    assert(!parse({"--rumble", "--apex6-pcm-target-percent", "0"}).succeeded);
+    assert(!parse({"--rumble", "--apex6-pcm-target-percent", "101"}).succeeded);
+    assert(!parse({"--rumble", "--apex6-pcm-max-gain-percent", "99"}).succeeded);
+    assert(!parse({"--rumble", "--apex6-pcm-max-gain-percent", "401"}).succeeded);
+    assert(!parse({"--rumble", "--apex6-pcm-linear-gain-percent", "1001"}).succeeded);
+
     return 0;
 }

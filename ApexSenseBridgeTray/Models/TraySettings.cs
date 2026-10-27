@@ -26,6 +26,121 @@ namespace ApexSenseBridgeTray.Models
         }
     }
 
+    public sealed class Apex6PcmGlobalSettings
+    {
+        public string Mode { get; set; }
+        public int LinearGainPercent { get; set; }
+        public int CompandingGainPercent { get; set; }
+        public int TargetPeakPercent { get; set; }
+        public int MaxGainPercent { get; set; }
+
+        public Apex6PcmGlobalSettings()
+        {
+            Mode = "original";
+            LinearGainPercent = 100;
+            CompandingGainPercent = 100;
+            TargetPeakPercent = 90;
+            MaxGainPercent = 400;
+        }
+
+        public void Normalize()
+        {
+            if (string.IsNullOrWhiteSpace(Mode)) Mode = "original";
+            Mode = Mode.Trim().ToLowerInvariant();
+            if (Mode != "original" && Mode != "companding" && Mode != "linear")
+                Mode = "original";
+            LinearGainPercent = Math.Max(0, Math.Min(1000, LinearGainPercent));
+            CompandingGainPercent = Math.Max(100, Math.Min(200, CompandingGainPercent));
+            TargetPeakPercent = Math.Max(1, Math.Min(100, TargetPeakPercent));
+            MaxGainPercent = Math.Max(100, Math.Min(400, MaxGainPercent));
+        }
+    }
+
+    public sealed class Apex6PcmGameSettings
+    {
+        public bool UseGlobal { get; set; }
+        public string Mode { get; set; }
+        public int MeasuredReferencePeakAbs16 { get; set; }
+        public double MeasuredReferencePercent { get; set; }
+        public int TargetPeakPercent { get; set; }
+        public int MaxGainPercent { get; set; }
+        public int LinearGainPercent { get; set; }
+        public int CompandingGainPercent { get; set; }
+        public string MeasuredUtc { get; set; }
+        public int MeasurementVersion { get; set; }
+        public int ObservedLeftPeakAbs16 { get; set; }
+        public int ObservedRightPeakAbs16 { get; set; }
+        public int ObservedActiveBlocks { get; set; }
+        public string ObservedStatus { get; set; }
+
+        public Apex6PcmGameSettings()
+        {
+            UseGlobal = false;
+            Mode = "linear";
+            TargetPeakPercent = 90;
+            MaxGainPercent = 400;
+            LinearGainPercent = 100;
+            CompandingGainPercent = 100;
+            MeasurementVersion = 1;
+            ObservedStatus = "none";
+        }
+
+        public static bool TryParseManualReference(string text, string unit, out int peakAbs16)
+        {
+            peakAbs16 = 0;
+            double value;
+            if (!double.TryParse(text, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out value) || double.IsNaN(value) || double.IsInfinity(value) || value < 0)
+                return false;
+            if (unit == "%")
+            {
+                if (value > 100) return false;
+                peakAbs16 = (int)Math.Round(value * 327.67);
+                return true;
+            }
+            if (unit != "abs16" || value > 32768 || value != Math.Truncate(value)) return false;
+            peakAbs16 = (int)value;
+            return true;
+        }
+
+        public bool TrySetManualReference(string text, string unit)
+        {
+            int peak;
+            if (!TryParseManualReference(text, unit, out peak)) return false;
+            MeasuredReferencePeakAbs16 = peak;
+            MeasuredReferencePercent = peak / 327.67;
+            ObservedStatus = "manual";
+            return true;
+        }
+
+        public double GetEffectiveGainRatio()
+        {
+            if (Mode == "linear") return LinearGainPercent / 100.0;
+            if (Mode == "companding") return CompandingGainPercent / 100.0;
+            return 1.0;
+        }
+
+        public void Normalize()
+        {
+            // Migrating an old Normalize profile must preserve its saved manual
+            // Linear gain instead of silently inheriting a different global policy.
+            var wasLegacyNormalize = string.Equals(Mode, "normalize", StringComparison.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(Mode)) Mode = "linear";
+            Mode = Mode.Trim().ToLowerInvariant();
+            if (Mode != "original" && Mode != "companding" && Mode != "linear")
+                Mode = "linear";
+            if (wasLegacyNormalize || (Mode == "linear" && LinearGainPercent != 100))
+                UseGlobal = false;
+            MeasuredReferencePeakAbs16 = Math.Max(0, Math.Min(32768, MeasuredReferencePeakAbs16));
+            MeasuredReferencePercent = Math.Max(0.0, Math.Min(100.0, MeasuredReferencePercent));
+            TargetPeakPercent = Math.Max(1, Math.Min(100, TargetPeakPercent));
+            MaxGainPercent = Math.Max(100, Math.Min(400, MaxGainPercent));
+            LinearGainPercent = Math.Max(0, Math.Min(1000, LinearGainPercent));
+            CompandingGainPercent = Math.Max(100, Math.Min(200, CompandingGainPercent));
+            if (string.IsNullOrWhiteSpace(ObservedStatus)) ObservedStatus = "none";
+        }
+    }
+
     public class TraySettings
     {
         public bool AutoDetectGames { get; set; }
@@ -55,6 +170,8 @@ namespace ApexSenseBridgeTray.Models
         // Legacy scalar preferences remain for migration, not as an active
         // cross-model calibration. Never persist the last connected model.
         public Dictionary<string, ControllerCalibration> ControllerCalibrations { get; set; }
+        public Apex6PcmGlobalSettings Apex6PcmGlobal { get; set; }
+        public Dictionary<string, Apex6PcmGameSettings> Apex6PcmGames { get; set; }
 
         public static bool IsCalibrationModel(string model)
         {
@@ -108,6 +225,117 @@ namespace ApexSenseBridgeTray.Models
             }
         }
 
+        public Apex6PcmGlobalSettings GetApex6PcmGlobal()
+        {
+            lock (this)
+            {
+                if (Apex6PcmGlobal == null) Apex6PcmGlobal = new Apex6PcmGlobalSettings();
+                Apex6PcmGlobal.Normalize();
+                return Apex6PcmGlobal;
+            }
+        }
+
+        public Apex6PcmGameSettings GetApex6PcmGameSettings(string normalizedKey)
+        {
+            if (string.IsNullOrWhiteSpace(normalizedKey)) return null;
+            lock (this)
+            {
+                if (Apex6PcmGames == null)
+                    Apex6PcmGames = new Dictionary<string, Apex6PcmGameSettings>(StringComparer.OrdinalIgnoreCase);
+                else if (!Equals(Apex6PcmGames.Comparer, StringComparer.OrdinalIgnoreCase))
+                {
+                    var normalized = new Dictionary<string, Apex6PcmGameSettings>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var pair in Apex6PcmGames) normalized[pair.Key] = pair.Value;
+                    Apex6PcmGames = normalized;
+                }
+
+                Apex6PcmGameSettings settings;
+                if (Apex6PcmGames.TryGetValue(normalizedKey.Trim(), out settings) && settings != null)
+                {
+                    settings.Normalize();
+                    return settings;
+                }
+                return null;
+            }
+        }
+
+        public void SetApex6PcmGameSettings(string normalizedKey, Apex6PcmGameSettings settings)
+        {
+            if (string.IsNullOrWhiteSpace(normalizedKey)) return;
+            lock (this)
+            {
+                if (Apex6PcmGames == null)
+                    Apex6PcmGames = new Dictionary<string, Apex6PcmGameSettings>(StringComparer.OrdinalIgnoreCase);
+                else if (!Equals(Apex6PcmGames.Comparer, StringComparer.OrdinalIgnoreCase))
+                {
+                    var normalized = new Dictionary<string, Apex6PcmGameSettings>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var pair in Apex6PcmGames) normalized[pair.Key] = pair.Value;
+                    Apex6PcmGames = normalized;
+                }
+
+                string key = normalizedKey.Trim();
+                if (settings == null)
+                {
+                    Apex6PcmGames.Remove(key);
+                }
+                else
+                {
+                    settings.Normalize();
+                    Apex6PcmGames[key] = settings;
+                }
+            }
+        }
+
+        public Apex6PcmGameSettings ResolveApex6PcmPolicy(string normalizedKey)
+        {
+            lock (this)
+            {
+                var global = GetApex6PcmGlobal();
+                var game = GetApex6PcmGameSettings(normalizedKey);
+                bool inherit = game == null || game.UseGlobal;
+                return new Apex6PcmGameSettings
+                {
+                    UseGlobal = inherit,
+                    Mode = inherit ? global.Mode : game.Mode,
+                    LinearGainPercent = inherit ? global.LinearGainPercent : game.LinearGainPercent,
+                    CompandingGainPercent = inherit ? global.CompandingGainPercent : game.CompandingGainPercent,
+                    TargetPeakPercent = inherit ? global.TargetPeakPercent : game.TargetPeakPercent,
+                    MaxGainPercent = inherit ? global.MaxGainPercent : game.MaxGainPercent,
+                    MeasuredReferencePeakAbs16 = game != null ? game.MeasuredReferencePeakAbs16 : 0,
+                    MeasuredReferencePercent = game != null ? game.MeasuredReferencePercent : 0
+                };
+            }
+        }
+
+        public string BuildApex6PcmArguments(string normalizedKey)
+        {
+            lock (this)
+            {
+                var policy = ResolveApex6PcmPolicy(normalizedKey);
+                string mode = policy.Mode;
+                int linear = policy.LinearGainPercent;
+                int companding = policy.CompandingGainPercent;
+
+                if (string.Equals(mode, "original", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Original is default in engine: omit to avoid --rumble requirement (P0-1)
+                    return string.Empty;
+                }
+                if (string.Equals(mode, "companding", StringComparison.OrdinalIgnoreCase))
+                {
+                    return string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                        " --apex6-pcm-mode companding --apex6-pcm-companding-gain-percent {0}", companding);
+                }
+                if (string.Equals(mode, "linear", StringComparison.OrdinalIgnoreCase))
+                {
+                    return string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                        " --apex6-pcm-mode linear --apex6-pcm-linear-gain-percent {0}", linear);
+                }
+
+                return string.Empty;
+            }
+        }
+
         public TraySettings()
         {
             AutoDetectGames = true;
@@ -128,6 +356,8 @@ namespace ApexSenseBridgeTray.Models
             ExcludedGames = new List<string>();
             ManualFixAllowedGames = new List<string>();
             ApexProfileSlots = new Dictionary<string, int>();
+            Apex6PcmGlobal = new Apex6PcmGlobalSettings();
+            Apex6PcmGames = new Dictionary<string, Apex6PcmGameSettings>(StringComparer.OrdinalIgnoreCase);
         }
 
         public bool IsGameExcluded(string normalizedOrTitle)
@@ -339,18 +569,25 @@ namespace ApexSenseBridgeTray.Models
         {
             try
             {
-                var path = SettingsFilePath;
-                var dir = Path.GetDirectoryName(path);
-                if (!Directory.Exists(dir))
+                // Serialize AND write under one lock so overlapping UI/autodetect
+                // saves cannot overwrite or race the same staging file.
+                lock (this)
                 {
-                    Directory.CreateDirectory(dir);
+                    var path = SettingsFilePath;
+                    var dir = Path.GetDirectoryName(path);
+                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    var json = new JavaScriptSerializer().Serialize(this);
+                    var stagingPath = path + ".tmp";
+                    File.WriteAllText(stagingPath, json);
+                    if (File.Exists(path)) File.Replace(stagingPath, path, null);
+                    else File.Move(stagingPath, path);
                 }
-                string json;
-                lock (this) json = new JavaScriptSerializer().Serialize(this);
-                File.WriteAllText(path, json);
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Trace.TraceError("ApexSenseBridge settings save failed: " + ex);
+                try { ApexSenseBridgeTray.Common.AppLog.WriteLine("tray.log", "Settings save failed: " + ex.Message); }
+                catch { /* Never crash the game bridge because a diagnostic log is unavailable. */ }
             }
         }
     }

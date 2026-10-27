@@ -4,8 +4,11 @@
 
 #include "dualsense/Apex6HapticBridge.h"
 #include "dualsense/Apex6PcmGain.h"
+#include "dualsense/Apex6PcmNormalization.h"
 #include "dualsense/Apex6TriggerEffect.h"
 #include "flydigi/Apex6Protocol.h"
+#include "platform/Apex6PcmControl.h"
+#include <cstring>
 
 #include <algorithm>
 #include <cassert>
@@ -315,6 +318,51 @@ void testPcmGainCurve() {
     assert(scaleApex6Pcm(1000, 0) == scaleApex6Pcm(1000));
 }
 
+void testApex6PcmNormalization() {
+    using namespace asb::dualsense;
+
+    // Original and legacy companding remain bit-identical.
+    Apex6PcmScaler original(Apex6PcmConfig{Apex6PcmMode::Original});
+    Apex6PcmConfig legacy{};
+    legacy.mode = Apex6PcmMode::Companding;
+    legacy.compandingGainPercent = 150;
+    legacy.legacyGainPercent = 150;
+    Apex6PcmScaler companding(legacy);
+    for (int sample = -32768; sample <= 32767; ++sample) {
+        bool clipped = false;
+        const auto pcm = static_cast<std::int16_t>(sample);
+        assert(original.scaleSample(pcm, clipped) == scaleApex6Pcm(pcm, 100));
+        assert(!clipped);
+        assert(companding.scaleSample(pcm, clipped) == scaleApex6Pcm(pcm, 150));
+        assert(!clipped);
+    }
+
+    // Linear scales signed samples uniformly with a safe 8-bit saturation.
+    Apex6PcmConfig linear{};
+    linear.mode = Apex6PcmMode::Linear;
+    for (const unsigned gain : {100U, 400U, 1000U, 1200U}) {
+        linear.linearGainPercent = gain;
+        Apex6PcmScaler scaler(linear);
+        const auto effective = gain > 1000 ? 10.0 : gain / 100.0;
+        assert(std::abs(scaler.state().effectiveGainRatio - effective) < 1e-9);
+        bool clipped = false;
+        assert(scaler.scaleSample(0, clipped) == 0 && !clipped);
+        const auto mid = scaler.scaleSample(1000, clipped);
+        assert(mid > 0 && !clipped);
+        assert(scaler.scaleSample(-1000, clipped) == -mid && !clipped);
+        assert(scaler.scaleSample(32767, clipped) == 127);
+        if (effective > 1.0) assert(clipped);
+        assert(scaler.scaleSample(-32768, clipped) == -127);
+        if (effective > 1.0) assert(clipped);
+    }
+    linear.linearGainPercent = 1000;
+    Apex6PcmScaler maxGain(linear);
+    bool clipped = false;
+    assert(maxGain.scaleSample(5000, clipped) == 127 && clipped);
+    assert(maxGain.scaleSample(-5000, clipped) == -127 && clipped);
+    assert(maxGain.scaleSample(100, clipped) > 0 && !clipped);
+}
+
 void testApex6EnvelopeThresholdPolicy() {
     using namespace asb::dualsense;
     using namespace asb::flydigi;
@@ -458,13 +506,94 @@ void testIdleSkipsFramesAndWakesImmediately() {
     assert(!bridge.failed());
 }
 
+void testLivePcmPolicyAndConcurrentStats() {
+#ifdef _WIN32
+    using namespace asb::dualsense;
+    using namespace asb::flydigi;
+    using namespace asb::platform;
+    auto* transport = new FakeApex6Transport();
+    Apex5Device device{TransportPtr(transport)};
+    std::string error;
+    assert(device.verifyIdentity(error));
+    const auto token = std::to_string(GetCurrentProcessId()) + "_bridge_control";
+    Apex6HapticBridge bridge(device, {}, true, 100, 100, Apex6PcmConfig{}, token, "game:123");
+    const auto name = "Local\\ApexSenseBridge.Session." + token + ".Apex6PcmControl";
+    HANDLE mapping = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, name.c_str());
+    assert(mapping);
+    HANDLE mutex = OpenMutexA(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE, (name + ".Mutex").c_str());
+    assert(mutex);
+    auto* view = static_cast<Apex6PcmControlBlock*>(MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, 308));
+    assert(view);
+    assert(bridge.start(error));
+    std::atomic_bool reading{true};
+    std::thread reader([&] {
+        while (reading.load()) {
+            const auto stats = bridge.stats();
+            assert(stats.pcmEffectiveGainRatio >= 0 && stats.pcmEffectiveGainRatio <= 10);
+            assert(stats.pcmMeasurementStatus == "valid" || stats.pcmMeasurementStatus == "limited");
+            std::this_thread::yield();
+        }
+    });
+    unsigned sequence = 0;
+    for (unsigned revision = 1; revision <= 5; ++revision) {
+        {
+            Apex6PcmLock lock(mutex);
+            *view = Apex6PcmControlBlock{};
+            std::memcpy(view->gameKey, "game:123", 9);
+            view->requestId = revision;
+            view->mode = revision == 1 ? 0 : revision == 5 ? 1 : 2;
+            view->compandingGainPercent = 200;
+            view->linearGainPercent = revision == 2 ? 0 : revision == 4 ? 1000 : 200;
+            view->referencePercent = 10;
+        }
+        bool acknowledged = false;
+        for (unsigned retry = 0; retry < 100; ++retry) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            Apex6PcmLock lock(mutex);
+            if (view->ackId == revision) { acknowledged = true; break; }
+        }
+        assert(acknowledged);
+        const auto before = bridge.stats().waveformBlocksRendered;
+        DualSenseFeedback feedback{};
+        feedback.kind = FeedbackKind::AudioHapticWaveform;
+        feedback.audioSequence = ++sequence;
+        feedback.leftHapticSamples.fill(5000);
+        bridge.handle(feedback);
+        for (unsigned retry = 0; retry < 100 && bridge.stats().waveformBlocksRendered == before; ++retry)
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        // Stats publication precedes rendered-block completion; wait one tick.
+        std::this_thread::sleep_for(std::chrono::milliseconds(12));
+        const auto stats = bridge.stats();
+        const double expected = revision == 1 ? 1 : revision == 2 ? 0 : revision == 4 ? 10 : 2;
+        assert(stats.pcmEffectiveGainRatio == expected);
+        const auto companded = static_cast<unsigned>(scaleApex6Pcm(5000, 200));
+        const auto expectedPeak = revision < 3 ? 19U : revision == 3 ? 39U : 127U;
+        assert(stats.pcmOutputLeftPeak == expectedPeak);
+    }
+    reading.store(false); reader.join();
+    assert(bridge.stop(error));
+    bool foundScaled = false;
+    bool foundCompanded = false;
+    for (const auto& report : transport->writes) {
+        if (report.size() == 33 && report[3] == asb::flydigi::apex6::kCmdRealtimeMotor) {
+            if (report[7] == 255) foundScaled = true;
+            if (report[7] == 128 + scaleApex6Pcm(5000, 200)) foundCompanded = true;
+        }
+    }
+    assert(foundScaled && foundCompanded);
+    UnmapViewOfFile(view); CloseHandle(mapping); CloseHandle(mutex);
+#endif
+}
+
 int main() {
     using namespace asb::dualsense;
     using namespace asb::flydigi;
 
+    testLivePcmPolicyAndConcurrentStats();
     testIdleSkipsFramesAndWakesImmediately();
     testNativeTriggerEffects();
     testPcmGainCurve();
+    testApex6PcmNormalization();
     testApex6EnvelopeThresholdPolicy();
     testBowEffect();
     testContinuousCarrierClock();

@@ -29,6 +29,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="tray_learning_tests.cs" />
+    <Compile Include="..\ApexSenseBridgeTray\Services\Apex6PcmControlClient.cs" />
     <Compile Include="..\ApexSenseBridgeTray\Services\SessionRecoveryState.cs" />
     <Compile Include="..\ApexSenseBridgeTray\Services\StartRetryPolicy.cs" />
     <Compile Include="..\ApexSenseBridgeTray\Services\EngineSessionManager.cs" />

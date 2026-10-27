@@ -1,4 +1,5 @@
 #include "cli/BridgeOptions.h"
+#include "platform/Apex6PcmControl.h"
 
 #include "flydigi/Apex5Protocol.h"
 #include "platform/SessionControl.h"
@@ -155,6 +156,88 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
                 error = "--apex6-haptic-gain requires an integer percentage from 100 to 200.";
                 return false;
             }
+        } else if (value == "--apex6-pcm-game-key" || value == "--apex6-pcm-game-key-hex") {
+            if (++i >= argc || !options.apex6PcmGameKey.empty()) {
+                error = "Specify exactly one PCM game key, directly or UTF-8 hex encoded.";
+                return false;
+            }
+            std::string key = argv[i];
+            if (value == "--apex6-pcm-game-key-hex") {
+                const auto digit = [](char c) -> int {
+                    if (c >= '0' && c <= '9') return c - '0';
+                    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+                    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+                    return -1;
+                };
+                if (key.empty() || key.size() > 510 || key.size() % 2 != 0) {
+                    error = "PCM game key hex requires 2 to 510 hexadecimal characters.";
+                    return false;
+                }
+                std::string decoded;
+                decoded.reserve(key.size() / 2);
+                for (std::size_t index = 0; index < key.size(); index += 2) {
+                    const auto high = digit(key[index]);
+                    const auto low = digit(key[index + 1]);
+                    if (high < 0 || low < 0) {
+                        error = "PCM game key hex contains a non-hexadecimal character.";
+                        return false;
+                    }
+                    decoded.push_back(static_cast<char>(high * 16 + low));
+                }
+                key = std::move(decoded);
+            }
+            if (!asb::platform::Apex6PcmControlServer::validGameKey(key)) {
+                error = "PCM game key requires 1 to 255 UTF-8 bytes without NUL.";
+                return false;
+            }
+            options.apex6PcmGameKey = std::move(key);
+        } else if (value == "--apex6-pcm-mode") {
+            if (++i >= argc) {
+                error = "--apex6-pcm-mode requires one of: original, companding, linear.";
+                return false;
+            }
+            const auto mode = asb::dualsense::parseApex6PcmMode(argv[i]);
+            if (!mode) {
+                error = "--apex6-pcm-mode requires one of: original, companding, linear.";
+                return false;
+            }
+            options.apex6PcmConfig.mode = *mode;
+            options.apex6PcmOptionsExplicit = true;
+        } else if (value == "--apex6-pcm-linear-gain-percent") {
+            if (++i >= argc) {
+                error = "--apex6-pcm-linear-gain-percent requires an integer percentage from 0 to 1000.";
+                return false;
+            }
+            try {
+                std::size_t consumed = 0;
+                const auto parsed = std::stoul(argv[i], &consumed);
+                if (consumed != std::string_view(argv[i]).size() || parsed > 1000 || argv[i][0] == '-') {
+                    throw std::out_of_range("apex6-pcm-linear-gain");
+                }
+                options.apex6PcmConfig.linearGainPercent = static_cast<unsigned>(parsed);
+                options.apex6PcmOptionsExplicit = true;
+            } catch (...) {
+                error = "--apex6-pcm-linear-gain-percent requires an integer percentage from 0 to 1000.";
+                return false;
+            }
+        } else if (value == "--apex6-pcm-companding-gain-percent") {
+            if (++i >= argc) {
+                error = "--apex6-pcm-companding-gain-percent requires an integer percentage from 100 to 200.";
+                return false;
+            }
+            try {
+                std::size_t consumed = 0;
+                const auto parsed = std::stoul(argv[i], &consumed);
+                if (consumed != std::string_view(argv[i]).size() || parsed < 100 || parsed > 200 || argv[i][0] == '-') {
+                    throw std::out_of_range("apex6-pcm-companding-gain-percent");
+                }
+                options.apex6PcmConfig.compandingGainPercent = static_cast<unsigned>(parsed);
+                options.apex6PcmConfig.legacyGainPercent = static_cast<unsigned>(parsed);
+                options.apex6PcmOptionsExplicit = true;
+            } catch (...) {
+                error = "--apex6-pcm-companding-gain-percent requires an integer percentage from 100 to 200.";
+                return false;
+            }
         } else if (value == "--apex4-gyro-strength" ||
                    value == "--apex4-gyro-yaw-strength") {
             if (++i >= argc) {
@@ -275,6 +358,9 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
             return false;
         }
     }
+    const bool calibrationsSupplied = options.controllerCalibrations[0] ||
+                                      options.controllerCalibrations[1] ||
+                                      options.controllerCalibrations[2];
     if (options.hapticThresholdExplicit && !options.routeRumble) {
         error = "--haptic-threshold requires --rumble.";
         return false;
@@ -283,9 +369,24 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
         error = "--session-owner-pid requires --session-token.";
         return false;
     }
-    if (options.apex6HapticGainExplicit && !options.routeRumble) {
+    if (options.apex6HapticGainExplicit && options.apex6PcmOptionsExplicit) {
+        error = "Cannot combine legacy --apex6-haptic-gain with --apex6-pcm-* options.";
+        return false;
+    }
+    if (options.apex6HapticGainExplicit && !options.routeRumble && !calibrationsSupplied) {
         error = "--apex6-haptic-gain requires --rumble.";
         return false;
+    }
+    if (options.apex6PcmOptionsExplicit &&
+        options.apex6PcmConfig.mode != asb::dualsense::Apex6PcmMode::Original &&
+        !options.routeRumble && !calibrationsSupplied) {
+        error = "--apex6-pcm-* options require --rumble.";
+        return false;
+    }
+    if (options.apex6HapticGainExplicit) {
+        options.apex6PcmConfig.mode = asb::dualsense::Apex6PcmMode::Companding;
+        options.apex6PcmConfig.legacyGainPercent = options.apex6HapticGainPercent;
+        options.apex6PcmConfig.compandingGainPercent = options.apex6HapticGainPercent;
     }
     error.clear();
     return true;
@@ -298,7 +399,11 @@ std::string_view bridgeCommandUsage() noexcept {
            "[--sync-lightbar] [--haptic-threshold 0..95] "
            "[--trigger-strength 0..100] [--vibration-strength 0..200] "
            "[--apex6-haptic-gain 100..200] "
-           "[--controller-calibration MODEL:TRIGGER:VIBRATION:THRESHOLD:RUMBLE:RGB:GYRO:YAW] "
+           "[--apex6-pcm-game-key UTF8KEY | --apex6-pcm-game-key-hex UTF8HEX] "
+           "[--apex6-pcm-mode original|companding|linear] "
+           "[--apex6-pcm-linear-gain-percent 0..1000] "
+           "[--apex6-pcm-companding-gain-percent 100..200] "
+            "[--controller-calibration MODEL:TRIGGER:VIBRATION:THRESHOLD:RUMBLE:RGB:GYRO:YAW] "
            "[--apex4-gyro-strength 25..400] "
            "[--apex4-gyro-yaw-strength 25..400] "
            "[--verify-virtual-input] [--touchpad-profile NAME] "
@@ -331,10 +436,12 @@ bool applyControllerCalibration(BridgeCommandOptions& options,
     options.apex4GyroStrengthPercent = c.gyro;
     options.apex4GyroYawStrengthPercent = c.gyroYaw;
     if (index != 1) options.apexProfileSlot.reset();
-    if (options.apex6HapticGainExplicit && !options.routeRumble) {
+    if (verifiedModel == "apex6" && options.apex6HapticGainExplicit && !options.routeRumble) {
         error = "--apex6-haptic-gain requires grip haptics in the selected calibration.";
         return false;
     }
+    // PCM policy is dormant when grips are disabled and never affects APEX 4/5.
+    // Do not change the model calibration's rumble choice to activate PCM.
     return true;
 }
 

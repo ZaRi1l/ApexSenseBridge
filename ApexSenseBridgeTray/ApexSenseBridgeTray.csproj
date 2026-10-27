@@ -121,6 +121,7 @@
     <Compile Include="Services\PlatformClientProcessFilter.cs" />
     <Compile Include="Services\ProcessMonitorService.cs" />
     <Compile Include="Services\EngineSessionManager.cs" />
+    <Compile Include="Services\Apex6PcmControlClient.cs" />
     <Compile Include="Services\SessionRecoveryState.cs" />
     <Compile Include="Services\StartRetryPolicy.cs" />
     <Compile Include="Services\SteamProcessChecker.cs" />

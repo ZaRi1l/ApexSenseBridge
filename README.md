@@ -24,6 +24,99 @@ interface in nine languages.
 
 ---
 
+## APEX 6 PCM correction verification (local fork)
+
+The `491e366` implementation was **not** validated by a Windows engine/WPF
+build. Its Python reimplementations are mathematical examples, not product-code
+integration tests. Do not use their PASS messages as release evidence.
+
+### Home Windows build and automated checks
+
+Use an existing Visual Studio C++/WPF toolchain, CMake, and .NET Framework 4.6.2
+reference assemblies. These commands do not install drivers or change firmware:
+
+```powershell
+.\scripts\build-windows.ps1
+if ($LASTEXITCODE -ne 0) { throw 'Engine build failed' }
+ctest --test-dir .\build-win -C Release --output-on-failure
+if ($LASTEXITCODE -ne 0) { throw 'Native regression tests failed' }
+.\scripts\build-tray-app.ps1
+if ($LASTEXITCODE -ne 0) { throw 'Tray build/tests failed' }
+```
+
+On a machine with PowerShell 7's existing Roslyn libraries and .NET Framework
+runtime assemblies, `./scripts/test-pcm-existing-compiler.ps1` compiles and runs
+the actual C# learning/settings/session regression suite without installing tools.
+It is **not** a WPF build and does not validate .NET 4.6.2 targeting compatibility.
+`python -I tests/test_pcm_wpf_contract.py` checks XAML event/control references
+and token-mapping spelling statically; it is **not** runtime IPC verification.
+
+A focused real-header/Windows IPC regression test is also provided. In an x64
+Visual Studio Developer PowerShell (the compiler must already be installed):
+
+```powershell
+cl /nologo /std:c++20 /EHsc /I src tests/test_pcm_header_standalone.cpp /Fe:tests/bin/pcm-header-test.exe
+if ($LASTEXITCODE -ne 0) { throw 'Header/IPC compilation failed' }
+.\tests\bin\pcm-header-test.exe
+if ($LASTEXITCODE -ne 0) { throw 'Header/IPC regression failed' }
+```
+
+The Windows CTest suite now registers `pcm_header_standalone` (explicitly built
+with `NDEBUG`) and `pcm_check_release_failure` (checks CHECK(false) exits with a
+failure). The concurrent test requires 500 acknowledged start/stop cycles, at
+least 20 rendered blocks per measurement and **at least 10,000 actual render
+updates**, with a 30-second CTest timeout.
+**Important:** this 10,000-update test is an IPC shared-memory stress test of
+`updateLive()`; it does **not** test the hardware audio playback of `renderBlock()`
+or physical actuator duty. Existing assert-based native suites explicitly undefine
+NDEBUG at their test target only; production builds are unchanged.
+
+PCM IPC version 3 uses a session-specific named mutex for command and snapshot
+isolation. To guarantee real-time audio safety and prevent haptic jitter or deadline
+misses, the audio render thread accesses IPC via a **non-blocking try-lock**
+(`WaitForSingleObject(mutex, 0)`). If the client holds the lock to read a snapshot,
+the audio thread never waits: it folds any peak amplitudes into internal deferred
+storage and commits them on the next cycle. Because drop, clip, and processed-sample
+counters are monotonic cumulative totals, zero counts are lost even under contention.
+On the UI side, Stop and final snapshot copy occur under the mutex and the result
+is saved automatically. The v3 layout also records cumulative **post-gain** 8-bit
+motor peaks independently of the original 16-bit PCM peaks. Engine and Tray must
+be rebuilt together; earlier IPC versions are rejected.
+
+Per-game Linear gain is set manually from **0–1000% (0–10x)** and is saved to
+Tray preferences; measurements never calculate or change gain. The live meter
+shows original 1kHz peaks, post-gain motor peaks (including when 100% is reached)
+and saturation/clipping counts. The native 8-bit actuator waveform still saturates
+at ±127: 1000% increases smaller samples but cannot exceed the protocol's peak
+amplitude. Abnormal heat or harsh clipping is a reason to lower gain.
+
+### Hardware / WPF runtime checks still required
+
+1. Close automatic competing sessions and start the bridge before the game.
+   Keep existing drivers/firmware. Confirm quadraphonic four-channel audio.
+2. Start with Original and 100% general strength. Record raw 48kHz (if available),
+   pre-gain 1kHz, and protocol output peaks separately. Output amplitude does not
+   measure physical motor force. Missing raw data is unavailable, not zero.
+3. Select the active game's entry, press Measure and observe continuously until
+   explicitly pressing Stop; that action also stores the measurement snapshot.
+   Selecting another item in the game's list must not stop an active engine or
+   meter. Starting another interval resets only that interval's peak counters.
+4. Set a game-specific Linear gain up to 1000%, switch windows without stopping
+   the bridge, and verify the gain survives closing and restarting the Tray.
+   A newly unconfigured game retains original PCM output.
+5. Compare repeatable short scenes in Original, the original Companding option,
+   and manual Linear gain. Verify live application without engine restart,
+   synchronized sliders/number inputs, accurate L/R peaks and clipping counters,
+   with no unintended trigger or ordinary-rumble change. Stop on unusual heat.
+6. Retest APEX 4 and 5 with rumble both enabled and disabled, including active
+   global APEX6 PCM policies; their calibration must remain authoritative.
+
+Tray PCM settings/measurement do not apply automatically to Playnite launches.
+The `.github/workflows/develop-validation.yml` workflow builds the native engine,
+WPF Tray and regression tests on Windows for every `develop` push. A remote CI
+runner cannot verify physical APEX 6 Pro vibration or in-game reconnection; those
+checks still require a real controller.
+
 ## Contents
 
 - [Stable 1.0.0 highlights](#stable-100-highlights)

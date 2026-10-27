@@ -279,6 +279,14 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME rumble_bridge COMMAND ApexSenseBridgeRumbleTests)
 
+    add_executable(ApexSenseBridgeApex6PcmControlTests
+        tests/test_apex6_pcm_control.cpp
+        src/cli/BridgeOptions.cpp
+        src/dualsense/TouchpadGestureProfile.cpp
+        src/platform/SessionControl.cpp)
+    target_link_libraries(ApexSenseBridgeApex6PcmControlTests PRIVATE asb_core)
+    add_test(NAME apex6_pcm_control COMMAND ApexSenseBridgeApex6PcmControlTests)
+
     add_executable(ApexSenseBridgeApex6HapticTests
         tests/test_apex6_haptic_bridge.cpp
     )
@@ -490,6 +498,25 @@ if(BUILD_TESTING)
         add_test(NAME hid_transport_windows
                  COMMAND ApexSenseBridgeHidTransportWindowsTests)
 
+        add_executable(ApexSenseBridgePcmHeaderStandaloneTests
+            tests/test_pcm_header_standalone.cpp
+        )
+        target_include_directories(ApexSenseBridgePcmHeaderStandaloneTests PRIVATE src)
+        # Deliberately compile this test with NDEBUG: CHECK must still execute.
+        target_compile_definitions(ApexSenseBridgePcmHeaderStandaloneTests PRIVATE NDEBUG)
+        if(MSVC)
+            target_compile_options(ApexSenseBridgePcmHeaderStandaloneTests PRIVATE /W4 /permissive- /EHsc)
+        else()
+            target_compile_options(ApexSenseBridgePcmHeaderStandaloneTests PRIVATE -Wall -Wextra -Wpedantic)
+        endif()
+        add_test(NAME pcm_header_standalone
+                 COMMAND ApexSenseBridgePcmHeaderStandaloneTests)
+        set_tests_properties(pcm_header_standalone PROPERTIES TIMEOUT 30)
+        add_test(NAME pcm_check_release_failure
+                 COMMAND ${CMAKE_COMMAND}
+                     -DTEST_EXE=$<TARGET_FILE:ApexSenseBridgePcmHeaderStandaloneTests>
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_check_failure.cmake)
+
         add_test(NAME installer_registry_contract
                  COMMAND powershell -NoProfile -NonInteractive
                          -ExecutionPolicy Bypass
@@ -499,4 +526,17 @@ if(BUILD_TESTING)
                          -ExecutionPolicy Bypass
                          -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify-version-consistency.ps1)
     endif()
+    # Existing native suites use assert() for checks and sometimes operations.
+    # Keep those expressions enabled in every configuration, including Release.
+    get_property(asb_test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(asb_test_target IN LISTS asb_test_targets)
+        if(asb_test_target MATCHES "Tests$" AND
+           NOT asb_test_target STREQUAL "ApexSenseBridgePcmHeaderStandaloneTests")
+            if(MSVC)
+                target_compile_options(${asb_test_target} PRIVATE /UNDEBUG)
+            else()
+                target_compile_options(${asb_test_target} PRIVATE -UNDEBUG)
+            endif()
+        endif()
+    endforeach()
 endif()

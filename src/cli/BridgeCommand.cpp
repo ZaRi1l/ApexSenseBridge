@@ -364,7 +364,8 @@ int commandBridgeTriggers(int argc, char** argv) {
     auto apex6Bridge = apex6Pro
         ? std::make_unique<asb::dualsense::Apex6HapticBridge>(
               *device, hapticConfig, options.routeRumble, options.triggerStrengthPercent,
-              options.vibrationStrengthPercent, options.apex6HapticGainPercent)
+              options.vibrationStrengthPercent, options.apex6PcmConfig,
+              options.sessionToken.value_or(std::string{}), options.apex6PcmGameKey)
         : std::unique_ptr<asb::dualsense::Apex6HapticBridge>{};
     if (apex6Bridge) {
         apex6Bridge->updateTriggerPositions(initialInput.l2, initialInput.r2);
@@ -782,6 +783,8 @@ int commandBridgeTriggers(int argc, char** argv) {
         // opens this endpoint. APEX 4/5 retain their asynchronous startup path.
         audioProtectionOk = audioProtectionFuture.get();
         const auto format = audioProtection.hapticFormat();
+        if (apex6Bridge) apex6Bridge->setPcmAudioFormat(format.channels,
+            format.status == asb::platform::HapticAudioFormatStatus::Quadraphonic);
         std::cout << "apex6_audio_format="
                   << asb::platform::hapticAudioFormatStatusName(format.status) << '\n'
                   << "apex6_audio_mix_channels=" << format.channels << '\n'
