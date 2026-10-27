@@ -124,7 +124,7 @@ private:
         }
 
         if (config_.mode == Apex6PcmMode::Linear) {
-            const auto gain = std::clamp(config_.linearGainPercent, 0U, 400U);
+            const auto gain = std::clamp(config_.linearGainPercent, 0U, 1000U);
             state_.requestedGainRatio = static_cast<double>(gain) / 100.0;
             state_.effectiveGainRatio = state_.requestedGainRatio;
             state_.gainLimited = false;
