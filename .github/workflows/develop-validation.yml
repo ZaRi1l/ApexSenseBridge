@@ -1,0 +1,58 @@
+name: Validate APEX 6 develop
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v3
+
+      - name: Build Windows C++ engine and native tests
+        shell: powershell
+        run: |
+          .\scripts\build-windows.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build WPF tray and run learning tests
+        shell: powershell
+        run: |
+          .\scripts\build-tray-app.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run native CTest suite
+        shell: powershell
+        run: |
+          ctest --test-dir .\build-win -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run PCM and WPF source contracts
+        shell: powershell
+        run: |
+          $tests = @(
+            'tests/test_apex6_pcm_normalization.py',
+            'tests/test_apex6_pcm_integration.py',
+            'tests/test_bridge_options_apex6_pcm.py',
+            'tests/test_pcm_wpf_contract.py',
+            'tests/test_tray_pcm_settings.py',
+            'tests/test_ui_contracts.py',
+            'tests/test_apex6_telemetry.py'
+          )
+          foreach ($test in $tests) {
+            Write-Host "Running $test"
+            python $test
+            if ($LASTEXITCODE -ne 0) { throw "Test failed: $test" }
+          }
