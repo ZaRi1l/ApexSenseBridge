@@ -6,7 +6,7 @@ namespace asb::platform {
 #pragma pack(push, 1)
 struct Apex6PcmControlBlock {
     std::uint32_t magic = 0x43365041;
-    std::uint32_t version = 1;
+    std::uint32_t version = 2;
     std::uint32_t requestId = 0;
     std::uint32_t ackId = 0;
     std::uint32_t status = 0;
@@ -19,9 +19,10 @@ struct Apex6PcmControlBlock {
     std::uint32_t maxGainPercent = 400;
     std::uint32_t legacyGainPercent = 100;
     std::uint32_t compandingGainPercent = 100;
+    std::uint32_t ignoreVibrationStrength = 0; // 0: apply, 1: bypass for PCM only
 };
 #pragma pack(pop)
-static_assert(sizeof(Apex6PcmControlBlock) == 308);
+static_assert(sizeof(Apex6PcmControlBlock) == 312);
 class Apex6PcmControlServer {
 public:
     Apex6PcmControlServer(std::string_view token, std::string_view gameKey) {
@@ -75,7 +76,7 @@ public:
         if (!view_) return;
         Apex6PcmLock lock(mutex_, 0);
         if (!lock || view_->requestId == 0) return;
-        if (view_->magic != 0x43365041 || view_->version != 1) { view_->status = 2; return; }
+        if (view_->magic != 0x43365041 || view_->version != 2) { view_->status = 2; return; }
         if (std::memcmp(view_->gameKey, gameKey_, sizeof(gameKey_)) != 0) { view_->status = 3; return; }
         if (view_->requestId == appliedId_) { view_->ackId = appliedId_; view_->status = 1; return; }
         if (view_->requestId < appliedId_) { view_->status = 5; return; }
@@ -84,13 +85,15 @@ public:
             view_->targetPercent < 1 || view_->targetPercent > 100 ||
             view_->maxGainPercent < 100 || view_->maxGainPercent > 400 ||
             view_->legacyGainPercent < 100 || view_->legacyGainPercent > 200 ||
-            view_->compandingGainPercent < 100 || view_->compandingGainPercent > 200) {
+            view_->compandingGainPercent < 100 || view_->compandingGainPercent > 200 ||
+            view_->ignoreVibrationStrength > 1) {
             view_->status = 4; return;
         }
         const dualsense::Apex6PcmConfig config{
             static_cast<dualsense::Apex6PcmMode>(view_->mode), view_->linearGainPercent,
             view_->referencePercent, view_->referencePeakAbs16, view_->targetPercent,
-            view_->maxGainPercent, view_->legacyGainPercent, view_->compandingGainPercent};
+            view_->maxGainPercent, view_->legacyGainPercent, view_->compandingGainPercent,
+            view_->ignoreVibrationStrength != 0};
         if (!apply(config)) return;
         appliedId_ = view_->requestId;
         view_->ackId = appliedId_;
