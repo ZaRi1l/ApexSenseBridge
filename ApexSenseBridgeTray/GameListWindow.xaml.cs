@@ -919,7 +919,7 @@ namespace ApexSenseBridgeTray
             Key key = e.Key == Key.System ? e.SystemKey : e.Key;
             bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
             bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
-            bool inTextBox = Keyboard.FocusedElement is TextBox;
+            var focusedTextBox = Keyboard.FocusedElement as TextBox;
 
             if (key == Key.Tab && ctrl)
             {
@@ -941,9 +941,15 @@ namespace ApexSenseBridgeTray
                 e.Handled = true;
                 return;
             }
-            if (inTextBox)
+            if (focusedTextBox != null)
             {
-                // Typing stays in the search box; Down or Enter hand control back to the list.
+                // Only the two search fields use Enter/Down to navigate the game
+                // list. Every other TextBox (notably PCM percentage inputs)
+                // must receive Enter itself so its KeyDown handler can commit
+                // the typed number and synchronize its slider and live engine.
+                // Previously PreviewKeyDown consumed Enter for *all* TextBoxes.
+                if (focusedTextBox != TxtSearch && focusedTextBox != TxtSearchLearned)
+                    return;
                 if (key != Key.Down && key != Key.Enter) return;
                 Focus();
                 bool revealed = RevealKeyboardFocus();
