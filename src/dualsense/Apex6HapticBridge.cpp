@@ -540,11 +540,15 @@ flydigi::apex6::MotorBlock Apex6HapticBridge::renderBlock(
         }
     }
 
+    const bool bypassPcmVibrationStrength = pcmExtension_.ignoreGlobalStrengthForPcm();
     unsigned leftPcmOutputPeak = 0;
     unsigned rightPcmOutputPeak = 0;
     for (std::size_t index = 0; index < output.size(); ++index) {
-        output[index].leftGrip = scaleEffectStrength(output[index].leftGrip, vibrationStrengthPercent_);
-        output[index].rightGrip = scaleEffectStrength(output[index].rightGrip, vibrationStrengthPercent_);
+        // Bypass only native PCM channels, never rumble/envelopes or triggers.
+        if (!bypassPcmVibrationStrength || !leftPcmActive)
+            output[index].leftGrip = scaleEffectStrength(output[index].leftGrip, vibrationStrengthPercent_);
+        if (!bypassPcmVibrationStrength || !rightPcmActive)
+            output[index].rightGrip = scaleEffectStrength(output[index].rightGrip, vibrationStrengthPercent_);
         if (routeGrips_ && leftPcmActive) {
             leftPcmOutputPeak = (std::max)(leftPcmOutputPeak,
                 static_cast<unsigned>(std::abs(int(output[index].leftGrip))));
