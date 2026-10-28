@@ -203,6 +203,9 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
             }
             options.apex6PcmConfig.mode = *mode;
             options.apex6PcmOptionsExplicit = true;
+        } else if (value == "--apex6-pcm-ignore-vibration-strength") {
+            options.apex6PcmConfig.ignoreVibrationStrength = true;
+            options.apex6PcmOptionsExplicit = true;
         } else if (value == "--apex6-pcm-linear-gain-percent") {
             if (++i >= argc) {
                 error = "--apex6-pcm-linear-gain-percent requires an integer percentage from 0 to 1000.";
@@ -402,6 +405,7 @@ std::string_view bridgeCommandUsage() noexcept {
            "[--apex6-pcm-game-key UTF8KEY | --apex6-pcm-game-key-hex UTF8HEX] "
            "[--apex6-pcm-mode original|companding|linear] "
            "[--apex6-pcm-linear-gain-percent 0..1000] "
+           "[--apex6-pcm-ignore-vibration-strength] "
            "[--apex6-pcm-companding-gain-percent 100..200] "
             "[--controller-calibration MODEL:TRIGGER:VIBRATION:THRESHOLD:RUMBLE:RGB:GYRO:YAW] "
            "[--apex4-gyro-strength 25..400] "
