@@ -409,5 +409,9 @@
   "Loc_Apex6PcmManualRefHint": "기준 피크 진폭을 직접 입력하세요 (1~32768, 예: 10028은 약 30.6%)",
   "Loc_Apex6PcmReset": "초기화",
   "Loc_Apex6PcmResetHint": "이 게임의 PCM 캘리브레이션을 초기화하고 전역 설정을 복원합니다",
+  "Loc_Apex6PcmRecommendedUnavailable": "PCM 100% 추천 배율: 기준 피크 측정 후 표시 (자동 적용 안 함)",
+  "Loc_Apex6PcmRecommendedLinear": "PCM 100% 추천 배율: 약 {0}% (전역 진동 크기 적용 전 · 자동 적용 안 함)",
+  "Loc_Apex6PcmRecommendedExceedsLimit": "PCM 100% 추천: 약 {0}% 필요 (설정 상한 1000% 초과 · 적용 안 함)",
+  "Loc_Apex6PcmMeasuredOutputPeak": "증폭 후 측정 최대 출력 L/R: {0:F1}% / {1:F1}% (디지털 출력)",
   "Loc_Apex6PcmApplyGlobalStrength": "PCM에 전체 진동 크기 적용"
 }
