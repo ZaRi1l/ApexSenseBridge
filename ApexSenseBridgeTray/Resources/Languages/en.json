@@ -53,7 +53,7 @@
   "Loc_SessionFailed": "Activation refused / error",
   "Loc_SessionEmpty": "Waiting",
   "Loc_AppName": "ApexSenseBridge",
-  "Loc_AppSubtitle": "DualSense \u2192 Flydigi APEX 4 / APEX 5 Bridge",
+  "Loc_AppSubtitle": "DualSense → Flydigi APEX 4 / APEX 5 Bridge",
   "Loc_AlreadyRunning": "ApexSenseBridge Tray is already running in the system tray.",
   "Loc_StartupError": "Startup error: ",
   "Loc_Close": "Close",
@@ -408,5 +408,6 @@
   "Loc_Apex6PcmGlobalNormalizeHint": "Each game uses its measured reference peak, scaled to this target amplitude.",
   "Loc_Apex6PcmManualRefHint": "Enter amplitude peak manually (1..32768, e.g. 10028 for ~30.6%)",
   "Loc_Apex6PcmReset": "Reset",
-  "Loc_Apex6PcmResetHint": "Reset this game's PCM calibration and restore global settings"
+  "Loc_Apex6PcmResetHint": "Reset this game's PCM calibration and restore global settings",
+  "Loc_Apex6PcmApplyGlobalStrength": "Apply global vibration strength to PCM"
 }
