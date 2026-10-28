@@ -1,0 +1,133 @@
+name: Package Extension preview (portable + installer)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [Extension]
+    paths:
+      - '.github/workflows/extension-packages.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extension-package-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-preview:
+    if: github.ref == 'refs/heads/Extension'
+    runs-on: windows-2022
+    timeout-minutes: 80
+    steps:
+      - name: Checkout exact Extension commit
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v3
+
+      - name: Install Inno Setup 6 for installer preview
+        shell: powershell
+        run: |
+          choco install innosetup --no-progress -y
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Setup Go for pinned VIIPER sidecar
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.5'
+          cache: false
+
+      - name: Build exact patched VIIPER backend (DLL and sidecar)
+        shell: powershell
+        run: |
+          .\scripts\build-viiper-windows.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\scripts\build-libviiper-windows.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build both preview packages using upstream packaging scripts
+        shell: powershell
+        run: |
+          # Deliberately do not pass -Sign. Fork preview has no official signing key.
+          .\scripts\build-installer.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run native and Tray regression checks
+        shell: powershell
+        run: |
+          ctest --test-dir .\build-win -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Validate and label unsigned preview outputs
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = Join-Path $PWD 'dist'
+          $setup = Join-Path $dist 'ApexSenseBridge-Setup.exe'
+          $portable = Join-Path $dist 'ApexSenseBridge-Portable.zip'
+          foreach ($path in @($setup, $portable)) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Missing package: $path"
+            }
+            if ((Get-Item -LiteralPath $path).Length -eq 0) {
+              throw "Empty package: $path"
+            }
+          }
+          $preview = Join-Path $PWD 'extension-preview'
+          New-Item -ItemType Directory -Path $preview -Force | Out-Null
+          Copy-Item -LiteralPath $portable -Destination (Join-Path $preview 'ApexSenseBridge-Extension-Portable.zip')
+          Copy-Item -LiteralPath $setup -Destination (Join-Path $preview 'ApexSenseBridge-Extension-UNSIGNED-Setup.exe')
+          $note = @(
+            'APEX 6 Extension preview - UNSIGNED BUILD'
+            "Commit: $env:GITHUB_SHA"
+            ''
+            'RECOMMENDED: Use ApexSenseBridge-Extension-Portable.zip for testing.'
+            'Do not run the portable and existing installed Tray/engine at the same time.'
+            'The portable bundle includes offline driver installers; if the existing official drivers work, do NOT reinstall them.'
+            ''
+            'WARNING: UNSIGNED-Setup.exe is NOT a side-by-side installer.'
+            'It retains the upstream AppId, Program Files path, Playnite extension ID and driver/registry actions.'
+            'Running it may overwrite/upgrade the existing ApexSenseBridge installation or alter driver state.'
+            'Do not run this preview Setup.exe when you want to keep an existing installation unchanged.'
+            'The fork executable/installer lacks the upstream vendor code-signing signature.'
+            ''
+            'Both packages were built on a GitHub-hosted Windows runner from this exact Extension commit.'
+          )
+          [System.IO.File]::WriteAllLines(
+            (Join-Path $preview 'READ-ME-FIRST.txt'), $note,
+            (New-Object System.Text.UTF8Encoding($false)))
+          $digest = Get-ChildItem -LiteralPath $preview -File |
+            Where-Object { $_.Extension -in @('.zip','.exe') } |
+            Sort-Object Name |
+            ForEach-Object { "{0}  {1}" -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash, $_.Name }
+          [System.IO.File]::WriteAllLines(
+            (Join-Path $preview 'SHA256SUMS.txt'), $digest,
+            (New-Object System.Text.UTF8Encoding($false)))
+          foreach ($file in (Get-ChildItem -LiteralPath $preview -File)) {
+            Write-Host "$($file.Name) ($([math]::Round($file.Length/1MB,1)) MiB)"
+          }
+
+      - name: Upload recommended portable preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: ApexSenseBridge-Extension-Portable-${{ github.run_number }}
+          path: |
+            extension-preview/ApexSenseBridge-Extension-Portable.zip
+            extension-preview/READ-ME-FIRST.txt
+            extension-preview/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload installer preview (UNSIGNED, replaces existing install)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ApexSenseBridge-Extension-Installer-UNSIGNED-${{ github.run_number }}
+          path: |
+            extension-preview/ApexSenseBridge-Extension-UNSIGNED-Setup.exe
+            extension-preview/READ-ME-FIRST.txt
+            extension-preview/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
