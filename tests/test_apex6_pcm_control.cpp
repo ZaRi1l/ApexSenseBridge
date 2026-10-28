@@ -13,7 +13,7 @@ using namespace asb::platform;
 using namespace asb::dualsense;
 
 int main() {
-    static_assert(sizeof(Apex6PcmControlBlock) == 308);
+    static_assert(sizeof(Apex6PcmControlBlock) == 312);
     asb::cli::BridgeCommandOptions options;
     std::string error;
     char a0[] = "asb", a1[] = "bridge", a2[] = "--apex6-pcm-game-key", a3[] = "game:123";
@@ -59,7 +59,7 @@ int main() {
         mapping = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, name.c_str());
         mutex = OpenMutexA(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE, (name + ".Mutex").c_str());
         assert(mapping && mutex);
-        view = static_cast<Apex6PcmControlBlock*>(MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, 308));
+        view = static_cast<Apex6PcmControlBlock*>(MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, 312));
         assert(view);
         Apex6PcmConfig applied;
         unsigned applications = 0;
@@ -115,10 +115,17 @@ int main() {
         assert(view->status == 5 && applications == 2);
         // A second engine cannot reset an existing session's endpoint.
         Apex6PcmControlServer duplicate(token, "game:123");
-        submit(7); duplicate.applyPending(apply);
+        submit(7); view->ignoreVibrationStrength = 1;
+        duplicate.applyPending(apply);
         assert(applications == 2);
         server.applyPending(apply);
-        assert(view->ackId == 7 && applications == 3);
+        assert(view->ackId == 7 && applications == 3 && applied.ignoreVibrationStrength);
+        submit(8); view->ignoreVibrationStrength = 2;
+        server.applyPending(apply);
+        assert(view->status == 4 && applications == 3);
+        submit(9); view->ignoreVibrationStrength = 0;
+        server.applyPending(apply);
+        assert(view->ackId == 9 && applications == 4 && !applied.ignoreVibrationStrength);
     }
     assert(view->status == 6);
     // A retained client handle must not allow a new engine to revive the old session.
