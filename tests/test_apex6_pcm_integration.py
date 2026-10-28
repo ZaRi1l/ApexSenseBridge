@@ -30,6 +30,24 @@ class ManualPcmIntegration(unittest.TestCase):
         gui = self.source("ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs")
         self.assertNotIn('Tag = "normalize"', gui)
 
+    def test_global_strength_bypass_is_pcm_only_and_defaults_off(self):
+        engine = self.source("src/dualsense/Apex6HapticBridge.cpp")
+        adapter = self.source("src/extensions/Apex6PcmExtension.h")
+        ipc = self.source("src/platform/Apex6PcmControl.h")
+        tray = self.source("ApexSenseBridgeTray/Services/Apex6PcmControlClient.cs")
+        model = self.source("ApexSenseBridgeTray/Models/TraySettings.cs")
+        ui = self.source("ApexSenseBridgeTray/GameListWindow.xaml")
+        self.assertIn("ignoreGlobalStrengthForPcm()", engine)
+        self.assertIn("if (!bypassPcmVibrationStrength || !leftPcmActive)", engine)
+        self.assertIn("if (!bypassPcmVibrationStrength || !rightPcmActive)", engine)
+        self.assertIn("scaler_.config().ignoreVibrationStrength", adapter)
+        self.assertIn("static_assert(sizeof(Apex6PcmControlBlock) == 312)", ipc)
+        self.assertIn("view_->version != 2", ipc)
+        self.assertIn("policy.ApplyGlobalVibrationStrength ? 0u : 1u", tray)
+        self.assertIn("public bool ApplyGlobalVibrationStrength { get; set; } = true", model)
+        self.assertIn("x:Name=\"ChkApex6PcmApplyGlobalStrength\"", ui)
+        self.assertIn("OnApex6PcmApplyGlobalStrengthChanged", self.source("ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs"))
+
     def test_measurements_do_not_change_gain(self):
         gui = self.source("ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs")
         self.assertIn("Saving a reference does not change the selected global/override policy.", gui)
