@@ -115,6 +115,18 @@ namespace ApexSenseBridgeTray.Models
             return true;
         }
 
+        // Display-only recommendation: do not alter the saved gain or live PCM policy.
+        // 32767 is the positive full-scale PCM sample, before the separate global
+        // vibration-strength setting and signed 8-bit motor-output quantization.
+        public int GetRecommendedLinearGainPercent()
+        {
+            int peak = MeasuredReferencePeakAbs16;
+            if (peak <= 0 && MeasuredReferencePercent > 0.0)
+                peak = (int)Math.Round(MeasuredReferencePercent * 327.67);
+            if (peak <= 0) return 0; // No reference yet; never divide by zero.
+            return (int)Math.Ceiling(32767.0 * 100.0 / Math.Min(32768, peak));
+        }
+
         public double GetEffectiveGainRatio()
         {
             if (Mode == "linear") return LinearGainPercent / 100.0;
