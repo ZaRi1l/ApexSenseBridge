@@ -321,6 +321,7 @@ namespace ApexSenseBridgeTray
                 if (RowApex6PcmLinear != null) RowApex6PcmLinear.Visibility = Visibility.Visible;
 
                 UpdateApex6PcmEffectiveGainDisplay(currentMode, refPct, targetPct, linearPct);
+                UpdateApex6PcmLinearRecommendation(policy);
             }
             finally
             {
@@ -349,6 +350,25 @@ namespace ApexSenseBridgeTray
                 TxtApex6PcmEffectiveGain.Text = string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:F2}x", linearPct / 100.0);
             }
 
+        }
+
+        private void UpdateApex6PcmLinearRecommendation(Apex6PcmGameSettings policy)
+        {
+            if (TxtApex6PcmLinearRecommendation == null) return;
+            int suggested = policy.GetRecommendedLinearGainPercent();
+            var key = suggested <= 0 ? "Loc_Apex6PcmRecommendedUnavailable" :
+                suggested > 1000 ? "Loc_Apex6PcmRecommendedExceedsLimit" : "Loc_Apex6PcmRecommendedLinear";
+            TxtApex6PcmLinearRecommendation.Text = suggested <= 0
+                ? LocalizationManager.Get(key)
+                : string.Format(CultureInfo.CurrentCulture, LocalizationManager.Get(key), suggested);
+        }
+
+        private void UpdateApex6PcmMeasuredOutputPeak(byte leftPeak8, byte rightPeak8)
+        {
+            if (TxtApex6PcmMeasuredOutputPeak == null) return;
+            TxtApex6PcmMeasuredOutputPeak.Text = string.Format(
+                CultureInfo.CurrentCulture, LocalizationManager.Get("Loc_Apex6PcmMeasuredOutputPeak"),
+                leftPeak8 * 100.0 / 127.0, rightPeak8 * 100.0 / 127.0);
         }
 
         private void OnApex6PcmUseGlobalRowClick(object sender, MouseButtonEventArgs e)
@@ -435,22 +455,28 @@ namespace ApexSenseBridgeTray
             QueuePcmEdit(); // live policy refresh, no engine reconnect
         }
 
+        private void ApplyGamePcmLinearGain(int value)
+        {
+            if (SelectedGame == null || settings == null) return;
+            var game = SelectedGame;
+            var gameSettings = settings.GetApex6PcmGameSettings(game.Normalized) ?? new Apex6PcmGameSettings();
+
+            // Both slider and typed entry explicitly save and send the same policy.
+            gameSettings.UseGlobal = false;
+            gameSettings.Mode = "linear";
+            gameSettings.LinearGainPercent = value;
+            if (TxtBoxApex6PcmLinear != null)
+                TxtBoxApex6PcmLinear.Text = value.ToString(CultureInfo.InvariantCulture);
+            settings.SetApex6PcmGameSettings(game.Normalized, gameSettings);
+            QueuePcmEdit();
+            UpdateApex6PcmEffectiveGainDisplay(gameSettings.Mode, gameSettings.MeasuredReferencePercent,
+                gameSettings.TargetPeakPercent, value);
+        }
+
         private void OnApex6PcmLinearChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (updatingApex6PcmUi || SelectedGame == null || settings == null) return;
-            var game = SelectedGame;
-            var gameSettings = settings.GetApex6PcmGameSettings(game.Normalized);
-            if (gameSettings == null) gameSettings = new Apex6PcmGameSettings();
-
-            // A manual gain edit activates this game's saved Linear PCM override.
-            gameSettings.UseGlobal = false;
-            gameSettings.Mode = "linear";
-            gameSettings.LinearGainPercent = (int)SliderApex6PcmLinear.Value;
-            if (TxtBoxApex6PcmLinear != null) TxtBoxApex6PcmLinear.Text = gameSettings.LinearGainPercent.ToString(CultureInfo.InvariantCulture);
-            settings.SetApex6PcmGameSettings(game.Normalized, gameSettings);
-            QueuePcmEdit();
-
-            UpdateApex6PcmEffectiveGainDisplay(gameSettings.Mode, gameSettings.MeasuredReferencePercent, gameSettings.TargetPeakPercent, gameSettings.LinearGainPercent);
+            ApplyGamePcmLinearGain((int)SliderApex6PcmLinear.Value);
         }
 
         private void OnApex6PcmCompandingChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -473,19 +499,56 @@ namespace ApexSenseBridgeTray
             UpdateApex6PcmDetailPane();
         }
 
+        private static bool TryReadPcmNumber(TextBox input, Slider slider, out int value)
+        {
+            return int.TryParse(input.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value) &&
+                value >= slider.Minimum && value <= slider.Maximum;
+        }
+
         private static void CommitPcmNumber(TextBox input, Slider slider)
         {
             int value;
-            if (int.TryParse(input.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value) &&
-                value >= slider.Minimum && value <= slider.Maximum)
-                slider.Value = value;
+            if (TryReadPcmNumber(input, slider, out value)) slider.Value = value;
             input.Text = ((int)slider.Value).ToString(CultureInfo.InvariantCulture);
         }
 
         private void OnApex6PcmTargetTextLostFocus(object s, RoutedEventArgs e) { CommitPcmNumber(TxtBoxApex6PcmTarget, SliderApex6PcmTarget); }
-        private void OnApex6PcmLinearTextLostFocus(object s, RoutedEventArgs e) { CommitPcmNumber(TxtBoxApex6PcmLinear, SliderApex6PcmLinear); }
+        private void OnApex6PcmLinearTextLostFocus(object s, RoutedEventArgs e)
+        {
+            if (updatingApex6PcmUi || SelectedGame == null || settings == null) return;
+            int value;
+            if (!TryReadPcmNumber(TxtBoxApex6PcmLinear, SliderApex6PcmLinear, out value))
+            {
+                TxtBoxApex6PcmLinear.Text = ((int)SliderApex6PcmLinear.Value).ToString(CultureInfo.InvariantCulture);
+                return;
+            }
+            // ValueChanged can be suppressed during a detail refresh or fail to fire
+            // when the slider already displays the same number. Never rely on it for
+            // committing typed input to saved settings or the running PCM engine.
+            updatingApex6PcmUi = true;
+            try { SliderApex6PcmLinear.Value = value; }
+            finally { updatingApex6PcmUi = false; }
+            ApplyGamePcmLinearGain(value);
+        }
         private void OnApex6PcmCompandingTextLostFocus(object s, RoutedEventArgs e) { CommitPcmNumber(TxtBoxApex6PcmCompanding, SliderApex6PcmCompanding); }
-        private void OnGlobalApex6PcmLinearTextLostFocus(object s, RoutedEventArgs e) { CommitPcmNumber(TxtBoxGlobalApex6PcmLinear, SliderGlobalApex6PcmLinear); }
+        private void OnGlobalApex6PcmLinearTextLostFocus(object s, RoutedEventArgs e)
+        {
+            if (updatingEffectSettings || settings == null) return;
+            int value;
+            if (!TryReadPcmNumber(TxtBoxGlobalApex6PcmLinear, SliderGlobalApex6PcmLinear, out value))
+            {
+                TxtBoxGlobalApex6PcmLinear.Text = ((int)SliderGlobalApex6PcmLinear.Value).ToString(CultureInfo.InvariantCulture);
+                return;
+            }
+            updatingEffectSettings = true;
+            try { SliderGlobalApex6PcmLinear.Value = value; }
+            finally { updatingEffectSettings = false; }
+            // Explicit commit; don't depend on the slider's ValueChanged event.
+            settings.GetApex6PcmGlobal().LinearGainPercent = value;
+            TxtBoxGlobalApex6PcmLinear.Text = value.ToString(CultureInfo.InvariantCulture);
+            QueuePcmEdit();
+            UpdateApex6PcmDetailPane();
+        }
         private void OnGlobalApex6PcmCompandingTextLostFocus(object s, RoutedEventArgs e) { CommitPcmNumber(TxtBoxGlobalApex6PcmCompanding, SliderGlobalApex6PcmCompanding); }
         private void OnApex6PcmTargetTextKeyDown(object s, KeyEventArgs e) { if (e.Key == Key.Enter) { OnApex6PcmTargetTextLostFocus(s, e); e.Handled = true; } }
         private void OnApex6PcmLinearTextKeyDown(object s, KeyEventArgs e) { if (e.Key == Key.Enter) { OnApex6PcmLinearTextLostFocus(s, e); e.Handled = true; } }
@@ -563,6 +626,8 @@ namespace ApexSenseBridgeTray
                     }
 
                     isMeasuringPcm = true;
+                    if (TxtApex6PcmMeasuredOutputPeak != null)
+                        TxtApex6PcmMeasuredOutputPeak.Text = string.Empty;
                     if (TxtApex6PcmMeasureAction != null)
                         TxtApex6PcmMeasureAction.Text = LocalizationManager.Get("Loc_Apex6PcmMeasureStop");
                     if (PnlApex6PcmLiveMeter != null)
@@ -648,6 +713,7 @@ namespace ApexSenseBridgeTray
                     uint incomplete = BitConverter.ToUInt32(pcmStoppedSnapshot, 72);
                     byte boostedLeftPeak8 = pcmStoppedSnapshot[76];
                     byte boostedRightPeak8 = pcmStoppedSnapshot[77];
+                    UpdateApex6PcmMeasuredOutputPeak(boostedLeftPeak8, boostedRightPeak8);
 
                     double maxPct = max16 / 327.67;
                     double rawPct = rawPeak16 / 327.67;
@@ -730,6 +796,7 @@ namespace ApexSenseBridgeTray
                 byte outputRight8 = snapshot[25];
                 byte maxOutputLeft8 = snapshot[76];
                 byte maxOutputRight8 = snapshot[77];
+                UpdateApex6PcmMeasuredOutputPeak(maxOutputLeft8, maxOutputRight8);
                 uint clippedSamples = BitConverter.ToUInt32(snapshot, 52);
 
                 double pctL = Math.Min(100.0, curL / 327.67);
