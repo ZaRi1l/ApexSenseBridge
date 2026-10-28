@@ -66,6 +66,8 @@ namespace ApexSenseBridgeTray.Models
         public int MaxGainPercent { get; set; }
         public int LinearGainPercent { get; set; }
         public int CompandingGainPercent { get; set; }
+        // Existing profile JSON without this property must keep using global strength.
+        public bool ApplyGlobalVibrationStrength { get; set; } = true;
         public string MeasuredUtc { get; set; }
         public int MeasurementVersion { get; set; }
         public int ObservedLeftPeakAbs16 { get; set; }
@@ -299,6 +301,7 @@ namespace ApexSenseBridgeTray.Models
                     Mode = inherit ? global.Mode : game.Mode,
                     LinearGainPercent = inherit ? global.LinearGainPercent : game.LinearGainPercent,
                     CompandingGainPercent = inherit ? global.CompandingGainPercent : game.CompandingGainPercent,
+                    ApplyGlobalVibrationStrength = game == null || game.ApplyGlobalVibrationStrength,
                     TargetPeakPercent = inherit ? global.TargetPeakPercent : game.TargetPeakPercent,
                     MaxGainPercent = inherit ? global.MaxGainPercent : game.MaxGainPercent,
                     MeasuredReferencePeakAbs16 = game != null ? game.MeasuredReferencePeakAbs16 : 0,
@@ -315,21 +318,22 @@ namespace ApexSenseBridgeTray.Models
                 string mode = policy.Mode;
                 int linear = policy.LinearGainPercent;
                 int companding = policy.CompandingGainPercent;
+                string strengthArg = policy.ApplyGlobalVibrationStrength ? string.Empty : " --apex6-pcm-ignore-vibration-strength";
 
                 if (string.Equals(mode, "original", StringComparison.OrdinalIgnoreCase))
                 {
                     // Original is default in engine: omit to avoid --rumble requirement (P0-1)
-                    return string.Empty;
+                    return strengthArg;
                 }
                 if (string.Equals(mode, "companding", StringComparison.OrdinalIgnoreCase))
                 {
                     return string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                        " --apex6-pcm-mode companding --apex6-pcm-companding-gain-percent {0}", companding);
+                        " --apex6-pcm-mode companding --apex6-pcm-companding-gain-percent {0}{1}", companding, strengthArg);
                 }
                 if (string.Equals(mode, "linear", StringComparison.OrdinalIgnoreCase))
                 {
                     return string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                        " --apex6-pcm-mode linear --apex6-pcm-linear-gain-percent {0}", linear);
+                        " --apex6-pcm-mode linear --apex6-pcm-linear-gain-percent {0}{1}", linear, strengthArg);
                 }
 
                 return string.Empty;
