@@ -522,7 +522,7 @@ void testLivePcmPolicyAndConcurrentStats() {
     assert(mapping);
     HANDLE mutex = OpenMutexA(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE, (name + ".Mutex").c_str());
     assert(mutex);
-    auto* view = static_cast<Apex6PcmControlBlock*>(MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, 308));
+    auto* view = static_cast<Apex6PcmControlBlock*>(MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, 312));
     assert(view);
     assert(bridge.start(error));
     std::atomic_bool reading{true};
