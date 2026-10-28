@@ -70,7 +70,7 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          Add-Type -AssemblyName System.IO.Compression
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
           $original = Join-Path $PWD 'dist\ApexSenseBridge-Portable.zip'
           if (-not (Test-Path -LiteralPath $original -PathType Leaf)) {
             throw "Missing portable ZIP: $original"
