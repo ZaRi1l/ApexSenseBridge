@@ -819,8 +819,23 @@ internal static class TrayLearningTests
             " --apex6-pcm-mode linear --apex6-pcm-linear-gain-percent 150",
             "One game's boost leaked into another game.");
 
+        // Old JSON must preserve the former global-strength behavior.
+        var oldSettingsJson = @"{""Apex6PcmGames"":{""legacy-game"":{""Mode"":""linear"",""LinearGainPercent"":400}}}";
+        var fromOldJson = new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<TraySettings>(oldSettingsJson);
+        Assert(fromOldJson.ResolveApex6PcmPolicy("legacy-game").ApplyGlobalVibrationStrength,
+            "Older profiles without new fields must use global vibration strength.");
+        var bypassGame = new Apex6PcmGameSettings {
+            UseGlobal = false, Mode = "linear", LinearGainPercent = 1000,
+            ApplyGlobalVibrationStrength = false };
+        settings.SetApex6PcmGameSettings("exclusive-pcm", bypassGame);
+        Assert(settings.BuildApex6PcmArguments("exclusive-pcm").Contains("--apex6-pcm-ignore-vibration-strength"),
+            "Per-game bypass must reach engine startup arguments.");
+        Assert(!settings.BuildApex6PcmArguments("zenless-zone-zero").Contains("--apex6-pcm-ignore-vibration-strength"),
+            "Per-game bypass must not leak into another game's startup.");
         var serializer = new System.Web.Script.Serialization.JavaScriptSerializer();
         var restored = serializer.Deserialize<TraySettings>(serializer.Serialize(settings));
+        Assert(!restored.ResolveApex6PcmPolicy("exclusive-pcm").ApplyGlobalVibrationStrength,
+            "Per-game bypass must survive JSON roundtrip.");
         Assert(restored.GetApex6PcmGameSettings("ZENLESS-ZONE-ZERO").LinearGainPercent == 1000,
             "Game gain was lost during settings JSON roundtrip.");
         Assert(restored.GetApex6PcmGameSettings("zenless-zone-zero").MeasuredReferencePeakAbs16 == 10028,
