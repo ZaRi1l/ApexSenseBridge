@@ -47,6 +47,11 @@ public:
         return scaler_.scaleSample(sample, clipped);
     }
 
+    [[nodiscard]] bool ignoreGlobalStrengthForPcm() const noexcept {
+        // Render-thread-owned policy; no extra lock on the haptic audio path.
+        return scaler_.config().ignoreVibrationStrength;
+    }
+
     void publish(std::uint16_t left, std::uint16_t right,
                  std::uint16_t rawLeft, std::uint16_t rawRight,
                  std::uint8_t outputLeft, std::uint8_t outputRight,
