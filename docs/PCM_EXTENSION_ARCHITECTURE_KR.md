@@ -19,6 +19,36 @@ This is an **in-process, source-level extension module** compiled with ApexSense
 
 Original (100%) leaves game PCM unchanged, Linear ranges 0–1000%, and the original Companding code remains available. **No automatic Normalize or recommended reference gain**. Metering starts/stops at user request and is separate from applied gain. The amplified peak is the output just before the HID write, not a measurement of physical motor force.
 
+## Per-game PCM vs. global vibration strength
+
+The game-detail PCM panel now has an **Apply global vibration strength to PCM** switch (Korean: `PCM에 전체 진동 크기 적용`).
+
+- **On (default):** Native PCM passes through the ordinary APEX 6 global vibration strength scaling, exactly as before. Existing settings JSON missing this field remains **On**.
+- **Off:** Native PCM channels bypass only that global strength step. The game's manual Linear/Companding gain and 8-bit clipping limits still apply. Ordinary rumble, synthesized envelopes, triggers and other controllers remain on their existing paths.
+- The option is stored per game and can be edited while the engine is running through the PCM control IPC v2 (`Apex6PcmControlBlock`, 312 bytes). Both engine and Tray must be rebuilt together; old v1 clients cannot modify a v2 engine.
+- The live **amplified output** meter displays the final digital PCM peak after the selected mode, clipping and whichever global strength policy is active; this is **not a physical motor force measurement**.
+- Global strength at 0% does **not** mute native PCM when the switch is Off. Other vibration channels continue using global strength.
+
+## Upstream compatibility audit (important)
+
+This is **not** a drop-in binary DLC. Moving PCM code into `src/extensions/Apex6PcmExtension.h` and WPF event logic into a partial class reduces merge overlap, but it does not completely decouple the original repository.
+
+The likely three-way merge conflict surfaces are:
+
+| Upstream surface | Extension coupling | Risk if upstream modifies the same region |
+|---|---|---|
+| `src/dualsense/Apex6HapticBridge.{h,cpp}` | Calls PCM adapter around render, final scaling, telemetry | Medium/high |
+| `ApexSenseBridgeTray/GameListWindow.xaml` | Adds the PCM controls and live meter | Medium/high |
+| `ApexSenseBridgeTray/Models/TraySettings.cs` | Stores per-game gain/strength/measurement fields | Medium |
+| `ApexSenseBridgeTray/Services/EngineSessionManager.cs` | Supplies active game/token and live update IPC | Medium |
+| `src/cli/BridgeOptions.{h,cpp}`, `BridgeCommand.cpp`, `shared/BridgeArguments.cs` | Startup arguments/policy | Medium |
+| `CMakeLists.txt` / Tray project | Compiles extension and support code | Medium |
+| `src/extensions/*`, Tray `Extensions/*`, `src/platform/Apex6Pcm*` | Extension-owned implementation | Low if upstream never adopts same names |
+
+The current extension was created directly from upstream `stable`, followed by grafting PCM changes and new isolated modules. **Being upstream-based does not guarantee painless merges**; a future upstream change to the same renderer/UI/protocol can still need manual conflict resolution.
+
+For upgrades, synchronize into `Extension` only, keep a temporary safety branch/tag, inspect upstream commits and file overlap, merge (never overwrite user settings or changes blindly), and run Windows build + native, Tray, IPC and UI regression tests. Do **not** send an upstream PR without the owner's explicit consent.
+
 ## Building / testing
 
 Build both parts of the same checkout using:
