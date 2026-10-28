@@ -230,6 +230,8 @@ namespace ApexSenseBridgeTray
                 var game = SelectedGame;
                 var gameSettings = settings.GetApex6PcmGameSettings(game.Normalized);
                 var policy = settings.ResolveApex6PcmPolicy(game.Normalized);
+                if (ChkApex6PcmApplyGlobalStrength != null)
+                    ChkApex6PcmApplyGlobalStrength.IsChecked = policy.ApplyGlobalVibrationStrength;
 
                 bool useGlobal = policy.UseGlobal;
                 if (ChkApex6PcmUseGlobal != null) ChkApex6PcmUseGlobal.IsChecked = useGlobal;
@@ -420,6 +422,18 @@ namespace ApexSenseBridgeTray
         }
         private void OnApex6PcmMaxGainTextLostFocus(object s, RoutedEventArgs e) { CommitPcmNumber(TxtBoxApex6PcmMaxGain, SliderApex6PcmMaxGain); }
         private void OnApex6PcmMaxGainTextKeyDown(object s, KeyEventArgs e) { if (e.Key == Key.Enter) { OnApex6PcmMaxGainTextLostFocus(s, e); e.Handled = true; } }
+
+        private void OnApex6PcmApplyGlobalStrengthChanged(object sender, RoutedEventArgs e)
+        {
+            if (updatingApex6PcmUi || SelectedGame == null || settings == null || ChkApex6PcmApplyGlobalStrength == null) return;
+            var key = SelectedGame.Normalized;
+            var game = settings.GetApex6PcmGameSettings(key);
+            if (game == null)
+                game = new Apex6PcmGameSettings { UseGlobal = true }; // preserve global mode inheritance
+            game.ApplyGlobalVibrationStrength = ChkApex6PcmApplyGlobalStrength.IsChecked.GetValueOrDefault(true);
+            settings.SetApex6PcmGameSettings(key, game);
+            QueuePcmEdit(); // live policy refresh, no engine reconnect
+        }
 
         private void OnApex6PcmLinearChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
