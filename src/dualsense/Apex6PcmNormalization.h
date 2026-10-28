@@ -42,6 +42,8 @@ struct Apex6PcmConfig {
     unsigned maxGainPercent = 400;
     unsigned legacyGainPercent = 100;
     unsigned compandingGainPercent = 100;
+    // Defaults off to preserve the original global vibration-strength behavior.
+    bool ignoreVibrationStrength = false;
 };
 
 struct Apex6PcmScalingState {
