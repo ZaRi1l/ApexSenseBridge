@@ -107,6 +107,16 @@ internal static class TrayLearningTests
         var settings = new TraySettings();
         var request = Apex6PcmControlClient.CreateRequest(" GAME ", settings.ResolveApex6PcmPolicy("game"));
         Assert(BitConverter.ToUInt32(request, 276) == 0, "unconfigured game must request original");
+        Assert(request.Length == 312 && BitConverter.ToUInt32(request, 4) == 2 && BitConverter.ToUInt32(request, 308) == 0,
+            "PCM control v2 must apply global strength by default.");
+        settings.SetApex6PcmGameSettings("independent-strength", new Apex6PcmGameSettings {
+            UseGlobal = true, ApplyGlobalVibrationStrength = false });
+        var strengthRequest = Apex6PcmControlClient.CreateRequest("independent-strength",
+            settings.ResolveApex6PcmPolicy("independent-strength"));
+        Assert(BitConverter.ToUInt32(strengthRequest, 308) == 1 && BitConverter.ToUInt32(strengthRequest, 276) == 0,
+            "Per-game PCM strength bypass must not change inherited PCM mode.");
+        Assert(BitConverter.ToUInt32(Apex6PcmControlClient.CreateRequest("other", settings.ResolveApex6PcmPolicy("other")), 308) == 0,
+            "A strength bypass on one game must not affect others.");
         Assert(Encoding.UTF8.GetString(request, 20, 4) == "game", "identity must be normalized");
         var linearRequest = Apex6PcmControlClient.CreateRequest("게임 키", new Apex6PcmGameSettings { Mode = "linear" });
         Assert(BitConverter.ToUInt32(linearRequest, 276) == 2 && BitConverter.ToUInt32(linearRequest, 300) == 100, "wire enum and legacy bounds match engine");
@@ -132,11 +142,11 @@ internal static class TrayLearningTests
         {
             string token = Guid.NewGuid().ToString("N");
             string name = @"Local\ApexSenseBridge.Session." + token + ".Apex6PcmControl";
-            using (var map = System.IO.MemoryMappedFiles.MemoryMappedFile.CreateNew(name, 308))
+            using (var map = System.IO.MemoryMappedFiles.MemoryMappedFile.CreateNew(name, 312))
             using (var view = map.CreateViewAccessor())
             using (var mutex = new Mutex(false, name + ".Mutex"))
             {
-                view.Write(0, 0x43365041u); view.Write(4, 1u); view.Write(8, 42u); view.Write(12, 42u);
+                view.Write(0, 0x43365041u); view.Write(4, 2u); view.Write(8, 42u); view.Write(12, 42u);
                 view.WriteArray(20, Encoding.UTF8.GetBytes("game"), 0, 4);
                 var task = new Apex6PcmControlClient().ApplyAsync(token, request, 600);
                 Assert(SpinWait.SpinUntil(() => view.ReadUInt32(8) == 43, 400), "client must advance existing revision");
@@ -145,9 +155,9 @@ internal static class TrayLearningTests
                 mutex.WaitOne();
                 try { view.Write(16, status); if (status == 1) view.Write(12, 43u); } finally { mutex.ReleaseMutex(); }
                 Assert(task.GetAwaiter().GetResult() == (status == 1 ? "Applied" : "Error: engine status " + status), "only Applied ACK counts as success");
-                view.Write(4, 2u);
+                view.Write(4, 1u);
                 Assert(new Apex6PcmControlClient().ApplyAsync(token, request).GetAwaiter().GetResult().Contains("InvalidProtocol"), "version mismatch is explicit");
-                view.Write(4, 1u); view.Write(12, 0u);
+                view.Write(4, 2u); view.Write(12, 0u);
                 Assert(new Apex6PcmControlClient().ApplyAsync(token, request, 80).GetAwaiter().GetResult().StartsWith("Disconnected"), "stale ACK must time out");
                 view.Write(16, 4u);
                 uint next = view.ReadUInt32(8) + 1;
