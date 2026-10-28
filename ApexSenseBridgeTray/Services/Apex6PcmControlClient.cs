@@ -23,7 +23,7 @@ namespace ApexSenseBridgeTray.Services
 
     internal sealed class Apex6PcmControlClient
     {
-        internal const int BlockSize = 308;
+        internal const int BlockSize = 312;
         internal const uint Magic = 0x43365041;
         private readonly SemaphoreSlim gate = new SemaphoreSlim(1, 1);
 
@@ -43,7 +43,7 @@ namespace ApexSenseBridgeTray.Services
             string mode = policy.Mode;
             using (var writer = new BinaryWriter(new MemoryStream(bytes)))
             {
-                writer.Write(Magic); writer.Write(1u);
+                writer.Write(Magic); writer.Write(2u);
                 writer.BaseStream.Position = 276;
                 writer.Write(mode == "linear" ? 2u : mode == "companding" ? 1u : 0u);
                 writer.Write((uint)policy.LinearGainPercent);
@@ -53,6 +53,7 @@ namespace ApexSenseBridgeTray.Services
                 writer.Write((uint)policy.MaxGainPercent);
                 writer.Write(100u);
                 writer.Write((uint)policy.CompandingGainPercent);
+                writer.Write(policy.ApplyGlobalVibrationStrength ? 0u : 1u);
             }
             return bytes;
         }
@@ -84,7 +85,7 @@ namespace ApexSenseBridgeTray.Services
                                     catch (AbandonedMutexException) { owned = true; return "Error: abandoned control mutex"; }
                                     if (owned)
                                     {
-                                        if (view.ReadUInt32(0) != Magic || view.ReadUInt32(4) != 1) return "Error: InvalidProtocol";
+                                        if (view.ReadUInt32(0) != Magic || view.ReadUInt32(4) != 2) return "Error: InvalidProtocol";
                                         if (view.ReadUInt32(16) == 6) return "Disconnected";
                                         if (!published)
                                         {
