@@ -796,6 +796,12 @@
                                                         <TextBlock x:Name="TxtApex6PcmEffectiveGain" Style="{StaticResource ValueLabel}" DockPanel.Dock="Right" Foreground="#10B981" FontWeight="Bold"/>
                                                     </DockPanel>
 
+                                                    <!-- Informational only: does not update slider, game profile, or engine -->
+                                                    <TextBlock x:Name="TxtApex6PcmLinearRecommendation"
+                                                               Text="{DynamicResource Loc_Apex6PcmRecommendedUnavailable}"
+                                                               FontSize="10.5" Foreground="#38BDF8" Margin="4,0,4,7"
+                                                               TextWrapping="Wrap"/>
+
                                                     <TextBlock x:Name="TxtApex6PcmControlStatus" Text="Active engine PCM: Disconnected" TextWrapping="Wrap" FontSize="11" Margin="4,0,4,8" Foreground="{DynamicResource TextMuted}"/>
 
                                                     <!-- Measurement Wizard Buttons & Reset -->
@@ -822,7 +828,10 @@
                                                     <!-- Live Peak Bar during measurement -->
                                                     <Border x:Name="PnlApex6PcmLiveMeter" Background="#0F172A" CornerRadius="6" Padding="8" Margin="0,0,0,6" Visibility="Collapsed">
                                                         <StackPanel>
-                                                            <TextBlock x:Name="TxtApex6PcmLiveStatus" Text="{DynamicResource Loc_Apex6PcmMeasuring}" FontSize="11" Foreground="#38BDF8" FontWeight="SemiBold"/>
+                                                            <TextBlock x:Name="TxtApex6PcmLiveStatus" Text="{DynamicResource Loc_Apex6PcmMeasuring}"
+                                                                       FontSize="11" Foreground="#38BDF8" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                                            <TextBlock x:Name="TxtApex6PcmMeasuredOutputPeak" FontSize="10.5"
+                                                                       Foreground="#10B981" Margin="0,5,0,2" TextWrapping="Wrap"/>
                                                             <DockPanel Margin="0,4,0,2">
                                                                 <TextBlock Text="L:" FontSize="10.5" Width="16" Foreground="{DynamicResource TextMuted}"/>
                                                                 <ProgressBar x:Name="PrgApex6PcmLiveL" Height="6" Maximum="100" Minimum="0" Background="#1E293B" Foreground="#38BDF8"/>
