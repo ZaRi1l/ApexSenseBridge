@@ -546,7 +546,7 @@ void testPerGamePcmStrengthBypass() {
                 maxRightRumble = (std::max)(maxRightRumble,
                     static_cast<unsigned>(std::abs(int(report[8 + i * 3]) - 128)));
         }
-        return std::array<unsigned, 2>{stats.pcmOutputLeftPeak, maxRightRumble};
+        return std::array<unsigned, 2>{static_cast<unsigned>(stats.pcmOutputLeftPeak), maxRightRumble};
     };
     const auto legacy = run(false);
     const auto independent = run(true);
