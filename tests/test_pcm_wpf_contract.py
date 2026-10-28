@@ -39,6 +39,36 @@ class PcmWpfContracts(unittest.TestCase):
         self.assertIn('PrgApex6PcmOutputL', cs)
         self.assertIn('PrgApex6PcmOutputR', cs)
 
+    def test_typed_linear_values_explicitly_commit_live_policy(self):
+        source = (ROOT / 'ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs').read_text(encoding='utf-8-sig')
+        game = source.split('private void OnApex6PcmLinearTextLostFocus(', 1)[1].split('private void OnApex6PcmCompandingTextLostFocus(', 1)[0]
+        global_edit = source.split('private void OnGlobalApex6PcmLinearTextLostFocus(', 1)[1].split('private void OnGlobalApex6PcmCompandingTextLostFocus(', 1)[0]
+        helper = source.split('private void ApplyGamePcmLinearGain(', 1)[1].split('private void OnApex6PcmLinearChanged(', 1)[0]
+        self.assertIn('ApplyGamePcmLinearGain(value)', game)
+        self.assertIn('SliderApex6PcmLinear.Value = value;', game)
+        self.assertIn('settings.SetApex6PcmGameSettings(', helper)
+        self.assertIn('QueuePcmEdit();', helper)
+        self.assertIn('settings.GetApex6PcmGlobal().LinearGainPercent = value;', global_edit)
+        self.assertIn('QueuePcmEdit();', global_edit)
+        self.assertIn('SliderGlobalApex6PcmLinear.Value = value;', global_edit)
+        self.assertIn('OnApex6PcmLinearTextKeyDown', source)
+        self.assertIn('OnGlobalApex6PcmLinearTextKeyDown', source)
+
+    def test_readonly_recommendation_and_maximum_output_display(self):
+        source = (ROOT / 'ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs').read_text(encoding='utf-8-sig')
+        ui = (ROOT / 'ApexSenseBridgeTray/GameListWindow.xaml').read_text(encoding='utf-8-sig')
+        model = (ROOT / 'ApexSenseBridgeTray/Models/TraySettings.cs').read_text(encoding='utf-8-sig')
+        self.assertIn('GetRecommendedLinearGainPercent()', model)
+        self.assertIn('Math.Ceiling(32767.0 * 100.0 / Math.Min(32768, peak))', model)
+        self.assertIn('TxtApex6PcmLinearRecommendation', ui)
+        self.assertIn('UpdateApex6PcmLinearRecommendation(policy)', source)
+        self.assertIn('TxtApex6PcmMeasuredOutputPeak', ui)
+        self.assertIn('UpdateApex6PcmMeasuredOutputPeak(boostedLeftPeak8, boostedRightPeak8)', source)
+        self.assertIn('UpdateApex6PcmMeasuredOutputPeak(maxOutputLeft8, maxOutputRight8)', source)
+        readonly = source.split('private void UpdateApex6PcmLinearRecommendation(', 1)[1].split('private void UpdateApex6PcmMeasuredOutputPeak(', 1)[0]
+        self.assertNotIn('QueuePcmEdit', readonly)
+        self.assertNotIn('SetApex6PcmGameSettings', readonly)
+
     def test_release_checks_remain_enabled(self):
         cmake = (ROOT / 'CMakeLists.txt').read_text()
         native = (ROOT / 'tests/test_pcm_header_standalone.cpp').read_text()
