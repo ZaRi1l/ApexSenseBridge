@@ -409,5 +409,9 @@
   "Loc_Apex6PcmManualRefHint": "Enter amplitude peak manually (1..32768, e.g. 10028 for ~30.6%)",
   "Loc_Apex6PcmReset": "Reset",
   "Loc_Apex6PcmResetHint": "Reset this game's PCM calibration and restore global settings",
+  "Loc_Apex6PcmRecommendedUnavailable": "Suggested gain for 100% PCM: measure a reference peak first (not applied)",
+  "Loc_Apex6PcmRecommendedLinear": "Suggested gain for 100% PCM: ~{0}% (before global strength; not applied)",
+  "Loc_Apex6PcmRecommendedExceedsLimit": "Suggested 100% PCM gain: ~{0}% (exceeds 1000% limit; not applied)",
+  "Loc_Apex6PcmMeasuredOutputPeak": "Measured maximum amplified L/R: {0:F1}% / {1:F1}% (digital output)",
   "Loc_Apex6PcmApplyGlobalStrength": "Apply global vibration strength to PCM"
 }
