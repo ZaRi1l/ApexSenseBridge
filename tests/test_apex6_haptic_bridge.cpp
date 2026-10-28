@@ -554,6 +554,120 @@ void testPerGamePcmStrengthBypass() {
     assert(legacy[1] > 0 && legacy[1] == independent[1]);
 }
 
+// Integration scenario: one running game, PCM measurement active, and multiple
+// live UI-like global-strength toggles. Verify actual fake-HID report order,
+// cumulative metering, acknowledgements and no device/session restart.
+void testPcmLiveStrengthHotSwitchAndMeter() {
+#ifdef _WIN32
+    using namespace asb::dualsense;
+    using namespace asb::flydigi;
+    using namespace asb::platform;
+    auto* transport = new FakeApex6Transport();
+    Apex5Device device{TransportPtr(transport)};
+    std::string error;
+    assert(device.verifyIdentity(error));
+    Apex6PcmConfig config{};
+    config.mode = Apex6PcmMode::Linear;
+    config.linearGainPercent = 200;
+    const auto token = std::to_string(GetCurrentProcessId()) + "_pcm_hot_switch";
+    Apex6HapticBridge bridge(device, {}, true, 100, 50, config, token, "game:hot");
+
+    const auto controlName = "Local\\ApexSenseBridge.Session." + token + ".Apex6PcmControl";
+    HANDLE controlMap = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, controlName.c_str());
+    HANDLE controlMutex = OpenMutexA(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE, (controlName + ".Mutex").c_str());
+    assert(controlMap && controlMutex);
+    auto* control = static_cast<Apex6PcmControlBlock*>(
+        MapViewOfFile(controlMap, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(Apex6PcmControlBlock)));
+    assert(control);
+
+    const auto liveName = "Local\\ApexSenseBridge.Session." + token + ".Apex6Pcm";
+    HANDLE liveMap = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, liveName.c_str());
+    HANDLE liveMutex = OpenMutexA(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE, (liveName + ".Mutex").c_str());
+    assert(liveMap && liveMutex);
+    auto* live = static_cast<Apex6PcmLiveBlock*>(
+        MapViewOfFile(liveMap, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(Apex6PcmLiveBlock)));
+    assert(live);
+    {
+        Apex6PcmLock lock(liveMutex, 100);
+        assert(lock && live->version == 3);
+        live->measurementGeneration = 1;
+        live->measurementActive = 1;
+    }
+
+    assert(bridge.start(error));
+    unsigned sequence = 0;
+    const auto sendWaveform = [&] {
+        DualSenseFeedback feedback{};
+        feedback.kind = FeedbackKind::AudioHapticWaveform;
+        feedback.leftHapticSamples.fill(5000);
+        feedback.rightHapticSamples.fill(0);
+        for (int i = 0; i < 6; ++i) {
+            feedback.audioSequence = ++sequence;
+            bridge.handle(feedback);
+            std::this_thread::sleep_for(std::chrono::milliseconds(11));
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    };
+    const auto updatePolicy = [&](unsigned request, bool bypass) {
+        {
+            Apex6PcmLock lock(controlMutex, 100);
+            assert(lock);
+            *control = Apex6PcmControlBlock{};
+            std::memcpy(control->gameKey, "game:hot", 8);
+            control->requestId = request;
+            control->mode = 2;
+            control->linearGainPercent = 200;
+            control->ignoreVibrationStrength = bypass ? 1 : 0;
+        }
+        bool applied = false;
+        for (int retry = 0; retry < 200; ++retry) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            Apex6PcmLock lock(controlMutex, 100);
+            assert(lock);
+            if (control->ackId == request && control->status == 1) {
+                applied = true; break;
+            }
+        }
+        assert(applied && !bridge.failed());
+    };
+
+    // 200% Linear at global 50%: output 19; bypass: output 39;
+    // re-enable global scaling: output 19 again, in the same session.
+    sendWaveform();
+    {
+        Apex6PcmLock lock(liveMutex, 100);
+        assert(lock && live->sessionGenerationEcho == 1);
+        assert(live->measuredMotorOutputLeftPeak8 == 19);
+    }
+    updatePolicy(1, true);
+    sendWaveform();
+    {
+        Apex6PcmLock lock(liveMutex, 100);
+        assert(lock && live->measuredMotorOutputLeftPeak8 == 39);
+        assert(live->measuredMaxPeak16 == 5000);
+        assert(live->measuredActiveBlocks > 0);
+    }
+    updatePolicy(2, false);
+    sendWaveform();
+    assert(bridge.stats().framesWritten > 0);
+    assert(!bridge.failed());
+    assert(bridge.stop(error));
+
+    // Validate wire-level signed PCM amplitude sequence, not only policy ACKs.
+    bool firstReduced = false, boosted = false, reducedAgain = false;
+    for (const auto& report : transport->writes) {
+        if (report.size() != 33 || report[3] != apex6::kCmdRealtimeMotor) continue;
+        const auto left = report[7];
+        if (!firstReduced && left == 128 + 19) firstReduced = true;
+        else if (firstReduced && !boosted && left == 128 + 39) boosted = true;
+        else if (boosted && left == 128 + 19) reducedAgain = true;
+    }
+    assert(firstReduced && boosted && reducedAgain);
+    UnmapViewOfFile(live); CloseHandle(liveMap); CloseHandle(liveMutex);
+    UnmapViewOfFile(control); CloseHandle(controlMap); CloseHandle(controlMutex);
+#endif
+}
+
 void testLivePcmPolicyAndConcurrentStats() {
 #ifdef _WIN32
     using namespace asb::dualsense;
@@ -638,6 +752,7 @@ int main() {
     using namespace asb::flydigi;
 
     testLivePcmPolicyAndConcurrentStats();
+    testPcmLiveStrengthHotSwitchAndMeter();
     testPerGamePcmStrengthBypass();
     testIdleSkipsFramesAndWakesImmediately();
     testNativeTriggerEffects();
