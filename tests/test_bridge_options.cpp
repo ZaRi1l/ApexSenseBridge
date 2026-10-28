@@ -206,6 +206,11 @@ int main() {
     assert(pcmLinear.options.apex6PcmConfig.mode == asb::dualsense::Apex6PcmMode::Linear);
     assert(pcmLinear.options.apex6PcmConfig.linearGainPercent == 1000);
     assert(pcmLinear.options.apex6PcmOptionsExplicit);
+    assert(!pcmLinear.options.apex6PcmConfig.ignoreVibrationStrength);
+    const auto independentPcm = parse({"--rumble", "--apex6-pcm-mode", "linear",
+        "--apex6-pcm-ignore-vibration-strength"});
+    assert(independentPcm.succeeded && independentPcm.options.apex6PcmConfig.ignoreVibrationStrength);
+    assert(parse({"--rumble", "--apex6-pcm-mode", "original"}).succeeded);
     assert(!parse({"--rumble", "--apex6-pcm-mode", "normalize"}).succeeded);
 
     // Mutual exclusion: cannot mix legacy --apex6-haptic-gain with new options
