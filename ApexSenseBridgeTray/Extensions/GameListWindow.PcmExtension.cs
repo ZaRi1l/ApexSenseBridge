@@ -529,6 +529,10 @@ namespace ApexSenseBridgeTray
             try { SliderApex6PcmLinear.Value = value; }
             finally { updatingApex6PcmUi = false; }
             ApplyGamePcmLinearGain(value);
+            // Enter and LostFocus are explicit commits, not a drag: persist and
+            // refresh the active PCM engine immediately instead of waiting for
+            // the debounce timer or a slider-mouseup event.
+            pcmEdits?.Flush();
         }
         private void OnApex6PcmCompandingTextLostFocus(object s, RoutedEventArgs e) { CommitPcmNumber(TxtBoxApex6PcmCompanding, SliderApex6PcmCompanding); }
         private void OnGlobalApex6PcmLinearTextLostFocus(object s, RoutedEventArgs e)
@@ -547,6 +551,7 @@ namespace ApexSenseBridgeTray
             settings.GetApex6PcmGlobal().LinearGainPercent = value;
             TxtBoxGlobalApex6PcmLinear.Text = value.ToString(CultureInfo.InvariantCulture);
             QueuePcmEdit();
+            pcmEdits?.Flush();
             UpdateApex6PcmDetailPane();
         }
         private void OnGlobalApex6PcmCompandingTextLostFocus(object s, RoutedEventArgs e) { CommitPcmNumber(TxtBoxGlobalApex6PcmCompanding, SliderGlobalApex6PcmCompanding); }
