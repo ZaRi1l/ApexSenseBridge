@@ -760,6 +760,19 @@
                                                         </StackPanel>
                                                     </Border>
 
+                                                    <!-- PCM-only, per-game global vibration-strength override -->
+                                                    <Border x:Name="RowApex6PcmApplyGlobalStrength" Style="{StaticResource SettingRow}" Margin="0,2,0,6">
+                                                        <DockPanel>
+                                                            <CheckBox x:Name="ChkApex6PcmApplyGlobalStrength" DockPanel.Dock="Right"
+                                                                      Style="{StaticResource SwitchCheckBox}" IsChecked="True"
+                                                                      VerticalAlignment="Center" Checked="OnApex6PcmApplyGlobalStrengthChanged"
+                                                                      Unchecked="OnApex6PcmApplyGlobalStrengthChanged"/>
+                                                            <TextBlock Text="{DynamicResource Loc_Apex6PcmApplyGlobalStrength}"
+                                                                       Style="{StaticResource RowLabel}" VerticalAlignment="Center"
+                                                                       TextWrapping="Wrap"/>
+                                                        </DockPanel>
+                                                    </Border>
+
                                                     <!-- Companding Gain Slider & Numeric (when companding mode) -->
                                                     <Border x:Name="RowApex6PcmCompanding" Style="{StaticResource SettingRow}" Margin="0,2,0,4" Visibility="Collapsed">
                                                         <StackPanel>
