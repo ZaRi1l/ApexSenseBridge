@@ -882,6 +882,20 @@ internal static class TrayLearningTests
         settings.SetApex6PcmGameSettings("manual", game);
         Assert(settings.ResolveApex6PcmPolicy("manual").GetEffectiveGainRatio() == 10.0,
             "Saved Linear boost did not produce 10x scaling.");
+        Assert(game.GetRecommendedLinearGainPercent() == 0,
+            "Unmeasured reference must not propose an automatic gain.");
+        Assert(game.TrySetManualReference("13736", "abs16"),
+            "Observed reference peak could not be stored.");
+        Assert(game.GetRecommendedLinearGainPercent() == 239,
+            "Observed 41.9 percent reference should suggest 239 percent.");
+        Assert(game.LinearGainPercent == 1000,
+            "Displaying a suggested gain must not change the user's saved gain.");
+        Assert(game.TrySetManualReference("2000", "abs16") &&
+            game.GetRecommendedLinearGainPercent() > 1000,
+            "Unreachable 100 percent gain should remain visibly above the slider limit.");
+        Assert(game.TrySetManualReference("32768", "abs16") &&
+            game.GetRecommendedLinearGainPercent() == 100,
+            "Full-scale input should suggest 100 percent.");
         Assert(game.TrySetManualReference("10028", "abs16"),
             "Raw peak metadata could not be stored.");
         Assert(settings.ResolveApex6PcmPolicy("manual").GetEffectiveGainRatio() == 10.0,
