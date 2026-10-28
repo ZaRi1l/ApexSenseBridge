@@ -506,6 +506,54 @@ void testIdleSkipsFramesAndWakesImmediately() {
     assert(!bridge.failed());
 }
 
+void testPerGamePcmStrengthBypass() {
+    using namespace asb::dualsense;
+    using namespace asb::flydigi;
+    // Fake HID transport: measure the same native waveform with strength=50%.
+    // The bypass may affect PCM only, not the existing ordinary rumble path.
+    const auto run = [](bool bypass) {
+        auto* transport = new FakeApex6Transport();
+        Apex5Device device{TransportPtr(transport)};
+        std::string error;
+        assert(device.verifyIdentity(error));
+        Apex6PcmConfig config{};
+        config.mode = Apex6PcmMode::Linear;
+        config.linearGainPercent = 100;
+        config.ignoreVibrationStrength = bypass;
+        Apex6HapticBridge bridge(device, {}, true, 100, 50, config);
+        assert(bridge.start(error));
+        DualSenseFeedback wave{};
+        wave.kind = FeedbackKind::AudioHapticWaveform;
+        wave.leftHapticSamples.fill(12000);
+        wave.rightHapticSamples.fill(0);
+        for (unsigned sequence = 1; sequence <= 4; ++sequence) {
+            wave.audioSequence = sequence;
+            bridge.handle(wave);
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        const auto stats = bridge.stats();
+        assert(stats.pcmOutputLeftPeak > 0);
+        DualSenseFeedback rumble{};
+        rumble.enableBits1 = 0x01;
+        rumble.rumbleRight = 200;
+        bridge.handle(rumble);
+        std::this_thread::sleep_for(std::chrono::milliseconds(35));
+        assert(bridge.stop(error));
+        unsigned maxRightRumble = 0;
+        for (const auto& report : transport->writes) {
+            if (report.size() != 33 || report[3] != apex6::kCmdRealtimeMotor) continue;
+            for (unsigned i = 0; i < 8; ++i)
+                maxRightRumble = (std::max)(maxRightRumble,
+                    static_cast<unsigned>(std::abs(int(report[8 + i * 3]) - 128)));
+        }
+        return std::array<unsigned, 2>{stats.pcmOutputLeftPeak, maxRightRumble};
+    };
+    const auto legacy = run(false);
+    const auto independent = run(true);
+    assert(independent[0] > legacy[0]);
+    assert(legacy[1] > 0 && legacy[1] == independent[1]);
+}
+
 void testLivePcmPolicyAndConcurrentStats() {
 #ifdef _WIN32
     using namespace asb::dualsense;
@@ -590,6 +638,7 @@ int main() {
     using namespace asb::flydigi;
 
     testLivePcmPolicyAndConcurrentStats();
+    testPerGamePcmStrengthBypass();
     testIdleSkipsFramesAndWakesImmediately();
     testNativeTriggerEffects();
     testPcmGainCurve();
