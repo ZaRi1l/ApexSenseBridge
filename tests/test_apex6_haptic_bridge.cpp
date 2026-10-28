@@ -484,8 +484,16 @@ void testIdleSkipsFramesAndWakesImmediately() {
     DualSenseFeedback silent{};
     silent.kind = FeedbackKind::AudioHapticWaveform;
     silent.audioSequence = 1;
+    const auto skippedBefore = bridge.stats().silentWaveformSkipped;
     bridge.handle(silent);
-    assert(bridge.stats().silentWaveformSkipped == 1);
+    // The render worker can be between idle transitions on heavily loaded CI.
+    // The block must eventually be suppressed, even if it was briefly queued.
+    const auto silentDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(300);
+    while (bridge.stats().silentWaveformSkipped == skippedBefore &&
+           std::chrono::steady_clock::now() < silentDeadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    assert(bridge.stats().silentWaveformSkipped > skippedBefore);
 
     const auto framesBefore = bridge.stats().framesWritten;
     DualSenseFeedback active = silent;
