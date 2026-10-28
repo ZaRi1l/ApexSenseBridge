@@ -106,20 +106,49 @@ jobs:
           finally {
             $archive.Dispose()
           }
-          $preview = Join-Path $PWD 'extension-preview'
-          New-Item -ItemType Directory -Path $preview -Force | Out-Null
-          $name = 'ApexSenseBridge-Extension-Portable.zip'
-          Copy-Item -LiteralPath $original -Destination (Join-Path $preview $name) -Force
+          # The upload-artifact action already produces the downloadable ZIP.
+          # Expand the upstream portable ZIP into the artifact input so users
+          # only need to extract the downloaded artifact once.
+          $artifactRoot = Join-Path $PWD 'extension-preview'
+          New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
+          Expand-Archive -LiteralPath $original -DestinationPath $artifactRoot -Force
+          $expanded = Join-Path $artifactRoot 'ApexSenseBridge-Portable'
+          if (-not (Test-Path -LiteralPath $expanded -PathType Container)) {
+            throw 'Missing expected portable folder inside upstream ZIP.'
+          }
+          Rename-Item -LiteralPath $expanded -NewName 'ApexSenseBridge-Extension'
+          $preview = Join-Path $artifactRoot 'ApexSenseBridge-Extension'
+          foreach ($file in @(
+            'ApexSenseBridge.exe',
+            'ApexSenseBridgeControl.exe',
+            'ApexSenseBridgeTray.exe',
+            'ApexSenseBridgeTray.exe.config',
+            'libVIIPER.dll',
+            'viiper.exe',
+            'Start-ApexSenseBridge.cmd',
+            'README-PORTABLE.txt'
+          )) {
+            if (-not (Test-Path -LiteralPath (Join-Path $preview $file) -PathType Leaf)) {
+              throw "Extracted artifact lacks required runtime file: $file"
+            }
+          }
+          if (@(Get-ChildItem -LiteralPath $preview -Filter '*.zip' -File).Count -ne 0) {
+            throw 'Refusing to upload nested ZIP files in the portable artifact.'
+          }
           $note = @(
             'APEX 6 EXTENSION - UNSIGNED PORTABLE PREVIEW'
             "Commit: $env:GITHUB_SHA"
             ''
-            'Contains ONLY the portable package (no Setup.exe is produced).'
-            'Extract the ZIP and run Start-ApexSenseBridge.cmd.'
+            'The GitHub Actions download ZIP is the only archive.'
+            'Extract that ZIP once into a folder, then run Start-ApexSenseBridge.cmd.'
             'Stop any installed or other ApexSenseBridge Tray/engine before starting this version.'
-            'The Windows USBip and HidHide drivers are NOT portable. If existing drivers'
-            'are working correctly, do not reinstall them or run Install-Drivers.cmd.'
-            'Driver installers are included in the ZIP only for machines that need them.'
+            'The portable program files are separate, but the original and Extension'
+            'share USBip/HidHide drivers, the game-session ownership, and user settings'
+            'at %LOCALAPPDATA%\ApexSenseBridge\tray_settings.json.'
+            'Back up settings before comparing versions. Do not run both versions together.'
+            'If Windows USBip and HidHide drivers are already working, do not reinstall'
+            'them or run Install-Drivers.cmd. Driver installers are included only for'
+            'machines that still need the prerequisites.'
             'The Extension executables are not signed with the upstream vendor certificate.'
             'Windows SmartScreen may warn about an unsigned development build.'
             'Both the Tray and native engine come from the same Extension commit.'
@@ -128,21 +157,26 @@ jobs:
           [System.IO.File]::WriteAllLines(
             (Join-Path $preview 'READ-ME-FIRST.txt'), $note,
             (New-Object System.Text.UTF8Encoding($false)))
-          $hash = (Get-FileHash -LiteralPath (Join-Path $preview $name) -Algorithm SHA256).Hash
-          [System.IO.File]::WriteAllText(
-            (Join-Path $preview 'SHA256SUMS.txt'),
-            "$hash  $name" + [Environment]::NewLine,
+          # A per-file manifest remains meaningful after GitHub re-zips the folder.
+          $hashFiles = @(
+            'ApexSenseBridge.exe', 'ApexSenseBridgeControl.exe',
+            'ApexSenseBridgeTray.exe', 'ApexSenseBridgeTray.exe.config',
+            'libVIIPER.dll', 'viiper.exe', 'Start-ApexSenseBridge.cmd'
+          )
+          $hashLines = @($hashFiles | ForEach-Object {
+            $digest = (Get-FileHash -LiteralPath (Join-Path $preview $_) -Algorithm SHA256).Hash
+            "$digest  $_"
+          })
+          [System.IO.File]::WriteAllLines(
+            (Join-Path $preview 'SHA256SUMS.txt'), $hashLines,
             (New-Object System.Text.UTF8Encoding($false)))
-          Write-Host "PORTABLE ARTIFACT: $name"
-          Write-Host "SHA256: $hash"
+          Write-Host "Verified direct-extract artifact folder: $preview"
+          Write-Host "Verified original ZIP SHA256: $((Get-FileHash -LiteralPath $original -Algorithm SHA256).Hash)"
 
-      - name: Upload Extension portable ZIP
+      - name: Upload direct-extract Extension portable
         uses: actions/upload-artifact@v4
         with:
           name: ApexSenseBridge-Extension-Portable-${{ github.run_number }}
-          path: |
-            extension-preview/ApexSenseBridge-Extension-Portable.zip
-            extension-preview/READ-ME-FIRST.txt
-            extension-preview/SHA256SUMS.txt
+          path: extension-preview/ApexSenseBridge-Extension/
           if-no-files-found: error
           retention-days: 14
