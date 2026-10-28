@@ -18,14 +18,21 @@ def test_default_and_legacy_migration():
 def test_game_specific_automatic_save():
     ui = (ROOT / "ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs").read_text(encoding="utf-8")
     ui += (ROOT / "ApexSenseBridgeTray/GameListWindow.xaml.cs").read_text(encoding="utf-8")
-    start = ui.index("private void OnApex6PcmLinearChanged")
-    end = ui.index("private void OnApex6PcmCompandingChanged", start)
-    handler = ui[start:end]
+    # Both slider and numeric entry use the same explicit save/live-apply helper.
+    helper_start = ui.index("private void ApplyGamePcmLinearGain")
+    slider_start = ui.index("private void OnApex6PcmLinearChanged", helper_start)
+    numeric_start = ui.index("private void OnApex6PcmLinearTextLostFocus", slider_start)
+    numeric_end = ui.index("private void OnApex6PcmCompandingTextLostFocus", numeric_start)
+    handler = ui[helper_start:slider_start]
+    slider_handler = ui[slider_start:ui.index("private void OnApex6PcmCompandingChanged", slider_start)]
+    numeric_handler = ui[numeric_start:numeric_end]
     assert 'gameSettings.UseGlobal = false;' in handler
     assert 'gameSettings.Mode = "linear";' in handler
-    assert 'gameSettings.LinearGainPercent = (int)SliderApex6PcmLinear.Value;' in handler
+    assert 'gameSettings.LinearGainPercent = value;' in handler
     assert 'settings.SetApex6PcmGameSettings(game.Normalized, gameSettings);' in handler
     assert 'QueuePcmEdit();' in handler
+    assert 'ApplyGamePcmLinearGain((int)SliderApex6PcmLinear.Value);' in slider_handler
+    assert 'ApplyGamePcmLinearGain(value);' in numeric_handler
     assert "pcmEdits.Flush()" in ui or "pcmEdits.Flush()" in (ROOT / "ApexSenseBridgeTray/GameListWindow.xaml.cs").read_text(encoding="utf-8")
     assert "settings.Save(); sessionManager?.RefreshPcmPolicy(settings);" in ui
 
