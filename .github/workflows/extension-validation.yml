@@ -39,6 +39,12 @@ jobs:
           ctest --test-dir .\build-win -C Release --output-on-failure
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Repeat runtime PCM and HID stress cases
+        shell: powershell
+        run: |
+          ctest --test-dir .\build-win -C Release --output-on-failure --repeat until-fail:3 -R "^(apex6_haptic_bridge|apex6_pcm_control|pcm_header_standalone)$"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Run PCM and WPF source contracts
         shell: powershell
         run: |
