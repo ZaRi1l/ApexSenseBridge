@@ -54,6 +54,27 @@ class PcmWpfContracts(unittest.TestCase):
         self.assertIn('OnApex6PcmLinearTextKeyDown', source)
         self.assertIn('OnGlobalApex6PcmLinearTextKeyDown', source)
 
+    def test_window_preview_keydown_allows_pcm_enter_to_commit(self):
+        host = (ROOT / 'ApexSenseBridgeTray/GameListWindow.xaml.cs').read_text(encoding='utf-8-sig')
+        ui = (ROOT / 'ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs').read_text(encoding='utf-8-sig')
+        xaml = (ROOT / 'ApexSenseBridgeTray/GameListWindow.xaml').read_text(encoding='utf-8-sig')
+        preview = host.split('private void OnWindowPreviewKeyDown(', 1)[1].split('private bool RevealKeyboardFocus(', 1)[0]
+        # Previously ALL TextBoxes were treated as list-search inputs, so the
+        # preview event swallowed Enter and the numeric KeyDown never ran.
+        self.assertIn('focusedTextBox != TxtSearch && focusedTextBox != TxtSearchLearned', preview)
+        self.assertIn('if (key != Key.Down && key != Key.Enter) return;', preview)
+        self.assertIn('return;', preview.split('focusedTextBox != TxtSearch && focusedTextBox != TxtSearchLearned', 1)[1].split('if (key != Key.Down', 1)[0])
+        self.assertIn('OnApex6PcmLinearTextKeyDown', xaml)
+        self.assertIn('OnGlobalApex6PcmLinearTextKeyDown', xaml)
+        game = ui.split('private void OnApex6PcmLinearTextLostFocus(', 1)[1].split('private void OnApex6PcmCompandingTextLostFocus(', 1)[0]
+        global_edit = ui.split('private void OnGlobalApex6PcmLinearTextLostFocus(', 1)[1].split('private void OnGlobalApex6PcmCompandingTextLostFocus(', 1)[0]
+        self.assertIn('SliderApex6PcmLinear.Value = value;', game)
+        self.assertIn('ApplyGamePcmLinearGain(value);', game)
+        self.assertIn('pcmEdits?.Flush();', game)
+        self.assertIn('SliderGlobalApex6PcmLinear.Value = value;', global_edit)
+        self.assertIn('pcmEdits?.Flush();', global_edit)
+        self.assertIn('e.Key == Key.Enter', ui)
+
     def test_readonly_recommendation_and_maximum_output_display(self):
         source = (ROOT / 'ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs').read_text(encoding='utf-8-sig')
         ui = (ROOT / 'ApexSenseBridgeTray/GameListWindow.xaml').read_text(encoding='utf-8-sig')
