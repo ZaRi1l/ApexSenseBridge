@@ -127,7 +127,7 @@ namespace ApexSenseBridgeTray
             TxtSettingsPcmGame.Text = hasSession ? activeGame : LocalizationManager.Get("Loc_Apex6PcmDisconnected");
             TxtSettingsPcmStatus.Text = (isMeasuringPcm || pcmStoppedSnapshot != null) &&
                                          TxtApex6PcmLiveStatus != null
-                ? TxtApex6PcmLiveStatus.Text : LocalizationManager.Get("Loc_Apex6PcmNotMeasured");
+                ? TxtApex6PcmLiveStatus.Text : LocalizationManager.Get("Loc_Apex6PcmMonitorIdle");
             if (PrgApex6PcmLiveL != null) PrgSettingsPcmInputL.Value = PrgApex6PcmLiveL.Value;
             if (PrgApex6PcmLiveR != null) PrgSettingsPcmInputR.Value = PrgApex6PcmLiveR.Value;
             if (PrgApex6PcmOutputL != null) PrgSettingsPcmOutputL.Value = PrgApex6PcmOutputL.Value;
