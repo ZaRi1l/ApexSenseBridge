@@ -1221,8 +1221,7 @@
                                             </Border>
                                             <StackPanel x:Name="PnlApex6PcmGlobalSettings" Visibility="Collapsed">
                                                 <!-- APEX 6-only PCM defaults; global vibration strength stays separate. -->
-                                                <TextBlock Text="{DynamicResource Loc_Apex6PcmTitle}" Style="{StaticResource SectionTitle}" Margin="4,12,0,5"/>
-                                                <TextBlock Text="{DynamicResource Loc_Apex6PcmGlobalScopeHint}" Foreground="{DynamicResource TextMuted}" FontSize="10.5" TextWrapping="Wrap" Margin="4,0,0,8"/>
+                                                <TextBlock Text="{DynamicResource Loc_Apex6PcmTitle}" Style="{StaticResource SectionTitle}" Margin="4,12,0,5" ToolTip="{DynamicResource Loc_Apex6PcmGlobalScopeHint}"/>
                                                 <Border Style="{StaticResource SettingRow}">
                                                     <StackPanel>
                                                         <DockPanel Margin="0,0,0,4">
@@ -1299,9 +1298,10 @@
                                                                        FontWeight="SemiBold" VerticalAlignment="Center"/>
                                                         </DockPanel>
                                                         <TextBlock x:Name="TxtSettingsPcmGame" Foreground="{DynamicResource TextSecondary}"
-                                                                   FontSize="11" TextWrapping="Wrap" Margin="0,0,0,3"/>
+                                                                   FontSize="11" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,0,0,3" ToolTip="{Binding RelativeSource={RelativeSource Self}, Path=Text}"/>
                                                         <TextBlock x:Name="TxtSettingsPcmStatus" Foreground="{DynamicResource TextSecondary}"
-                                                                   FontSize="10.5" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                                                   FontSize="10.5" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,0,0,8" ToolTip="{Binding RelativeSource={RelativeSource Self}, Path=Text}"/>
+                                                        <StackPanel x:Name="PnlSettingsPcmMeter" Visibility="Collapsed">
                                                         <TextBlock Text="{DynamicResource Loc_Apex6PcmInputChannels}" Foreground="{DynamicResource TextMuted}"
                                                                    FontSize="10.5" Margin="0,0,0,3"/>
                                                         <ProgressBar x:Name="PrgSettingsPcmInputL" Height="6" Maximum="100" Margin="0,0,0,4"/>
@@ -1312,6 +1312,7 @@
                                                         <ProgressBar x:Name="PrgSettingsPcmOutputR" Height="6" Maximum="100" Margin="0,0,0,6"/>
                                                         <TextBlock x:Name="TxtSettingsPcmPeak" Foreground="{DynamicResource TextSecondary}"
                                                                    FontSize="10.5" TextWrapping="Wrap"/>
+                                                        </StackPanel>
                                                     </StackPanel>
                                                 </Border>
                                             </StackPanel>
