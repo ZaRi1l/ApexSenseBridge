@@ -2207,6 +2207,11 @@ namespace ApexSenseBridgeTray
             var calibration = settings.GetControllerCalibration(lastControllerStatus);
             bool canEdit = calibration != null;
             var displayed = calibration ?? new ControllerCalibration();
+            // While an engine session owns the HID handle, passive controller
+            // detection can be unavailable; the verified session still permits
+            // access to its APEX 6 PCM settings and live monitor.
+            bool apex6Session = sessionManager != null &&
+                string.Equals(sessionManager.ActiveController, "apex6", StringComparison.OrdinalIgnoreCase);
             updatingEffectSettings = true;
             SliderTriggerStrength.Value = displayed.TriggerStrengthPercent;
             SliderVibrationStrength.Maximum = lastControllerStatus == "apex4" || lastControllerStatus == "apex5" ? 200 : 100;
@@ -2224,15 +2229,15 @@ namespace ApexSenseBridgeTray
             TileSettingSyncLightbar.IsEnabled = lastControllerStatus == "apex5";
             // Show only what the identified model supports; keep the locked message otherwise.
             TileSettingSyncLightbar.Visibility = TileSettingSyncLightbar.IsEnabled ? Visibility.Visible : Visibility.Collapsed;
-            PnlControllerEffects.Visibility = canEdit ? Visibility.Visible : Visibility.Collapsed;
+            PnlControllerEffects.Visibility = canEdit || apex6Session ? Visibility.Visible : Visibility.Collapsed;
             PnlApex4GyroSettings.Visibility = lastControllerStatus == "apex4" ? Visibility.Visible : Visibility.Collapsed;
             PnlHapticThresholdSettings.Visibility = SliderVibrationThreshold.IsEnabled ? Visibility.Visible : Visibility.Collapsed;
             if (PnlApex6PcmGlobalSettings != null)
             {
-                PnlApex6PcmGlobalSettings.Visibility = lastControllerStatus == "apex6"
+                PnlApex6PcmGlobalSettings.Visibility = lastControllerStatus == "apex6" || apex6Session
                     ? Visibility.Visible : Visibility.Collapsed;
                 // Global defaults are separate from explicit per-game overrides.
-                if (lastControllerStatus == "apex6")
+                if (lastControllerStatus == "apex6" || apex6Session)
                 {
                     UpdateGlobalApex6PcmUi();
                     UpdateSettingsPcmMonitor();
