@@ -1214,6 +1214,7 @@
                                             <StackPanel x:Name="PnlApex6PcmGlobalSettings" Visibility="Collapsed">
                                                 <!-- APEX 6-only PCM defaults; global vibration strength stays separate. -->
                                                 <TextBlock Text="{DynamicResource Loc_Apex6PcmTitle}" Style="{StaticResource SectionTitle}" Margin="4,12,0,5"/>
+                                                <TextBlock Text="{DynamicResource Loc_Apex6PcmGlobalScopeHint}" Foreground="{DynamicResource TextMuted}" FontSize="10.5" TextWrapping="Wrap" Margin="4,0,0,8"/>
                                                 <Border Style="{StaticResource SettingRow}">
                                                     <StackPanel>
                                                         <DockPanel Margin="0,0,0,4">
@@ -1286,18 +1287,18 @@
                                                                 <TextBlock x:Name="TxtSettingsPcmMeasureAction"
                                                                            Text="{DynamicResource Loc_Apex6PcmMeasureStart}"/>
                                                             </Button>
-                                                            <TextBlock Text="Live PCM Monitor" Style="{StaticResource RowLabel}"
+                                                            <TextBlock Text="{DynamicResource Loc_Apex6PcmMonitorTitle}" Style="{StaticResource RowLabel}"
                                                                        FontWeight="SemiBold" VerticalAlignment="Center"/>
                                                         </DockPanel>
                                                         <TextBlock x:Name="TxtSettingsPcmGame" Foreground="{DynamicResource TextSecondary}"
                                                                    FontSize="11" TextWrapping="Wrap" Margin="0,0,0,3"/>
                                                         <TextBlock x:Name="TxtSettingsPcmStatus" Foreground="{DynamicResource TextSecondary}"
                                                                    FontSize="10.5" TextWrapping="Wrap" Margin="0,0,0,8"/>
-                                                        <TextBlock Text="Input PCM (Left / Right)" Foreground="{DynamicResource TextMuted}"
+                                                        <TextBlock Text="{DynamicResource Loc_Apex6PcmInputChannels}" Foreground="{DynamicResource TextMuted}"
                                                                    FontSize="10.5" Margin="0,0,0,3"/>
                                                         <ProgressBar x:Name="PrgSettingsPcmInputL" Height="6" Maximum="100" Margin="0,0,0,4"/>
                                                         <ProgressBar x:Name="PrgSettingsPcmInputR" Height="6" Maximum="100" Margin="0,0,0,8"/>
-                                                        <TextBlock Text="Output PCM (Left / Right)" Foreground="{DynamicResource TextMuted}"
+                                                        <TextBlock Text="{DynamicResource Loc_Apex6PcmOutputChannels}" Foreground="{DynamicResource TextMuted}"
                                                                    FontSize="10.5" Margin="0,0,0,3"/>
                                                         <ProgressBar x:Name="PrgSettingsPcmOutputL" Height="6" Maximum="100" Margin="0,0,0,4"/>
                                                         <ProgressBar x:Name="PrgSettingsPcmOutputR" Height="6" Maximum="100" Margin="0,0,0,6"/>
