@@ -487,7 +487,9 @@ namespace ApexSenseBridgeTray
             var items = new FrameworkElement[]
             {
                 TileSettingSyncLightbar, RowTriggerStrength, RowVibrationStrength,
-                RowGyroStrength, RowGyroYawStrength, RowVibrationThreshold, RowGripVibrations
+                RowGyroStrength, RowGyroYawStrength, RowVibrationThreshold,
+                CmbGlobalApex6PcmMode, SliderGlobalApex6PcmLinear,
+                SliderGlobalApex6PcmCompanding, BtnSettingsPcmMeasure, RowGripVibrations
             }.Where(item => item != null);
             return (navigableOnly ? items.Where(IsNavigable) : items).ToArray();
         }
@@ -508,6 +510,8 @@ namespace ApexSenseBridgeTray
             if (row == RowGyroStrength) return SliderApex4GyroStrength;
             if (row == RowGyroYawStrength) return SliderApex4GyroYawStrength;
             if (row == RowVibrationThreshold) return SliderVibrationThreshold;
+            if (row == SliderGlobalApex6PcmLinear) return SliderGlobalApex6PcmLinear;
+            if (row == SliderGlobalApex6PcmCompanding) return SliderGlobalApex6PcmCompanding;
             return null;
         }
 
@@ -1062,6 +1066,7 @@ namespace ApexSenseBridgeTray
                 else if (item == TileSettingSyncLightbar) OnSettingSyncLightbarToggled(null, null);
                 else if (item == TileSettingLanguage) OpenLanguagePicker();
                 else if (item == RowGripVibrations) ToggleGripVibrations();
+                else if (item == CmbGlobalApex6PcmMode) CmbGlobalApex6PcmMode.IsDropDownOpen = true;
                 else if (item is Button button) button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 // Keep the focus ring on the same element after a toggle changed which rows are visible.
                 if (item != null)
@@ -2224,10 +2229,13 @@ namespace ApexSenseBridgeTray
             PnlHapticThresholdSettings.Visibility = SliderVibrationThreshold.IsEnabled ? Visibility.Visible : Visibility.Collapsed;
             if (PnlApex6PcmGlobalSettings != null)
             {
-                PnlApex6PcmGlobalSettings.Visibility = Visibility.Collapsed; // Manual gain is configured per game.
+                PnlApex6PcmGlobalSettings.Visibility = lastControllerStatus == "apex6"
+                    ? Visibility.Visible : Visibility.Collapsed;
+                // Global defaults are separate from explicit per-game overrides.
                 if (lastControllerStatus == "apex6")
                 {
                     UpdateGlobalApex6PcmUi();
+                    UpdateSettingsPcmMonitor();
                 }
             }
             TxtControllerCalibrationStatus.Text = canEdit
