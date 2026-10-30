@@ -39,7 +39,10 @@ namespace ApexSenseBridgeTray
                 (sessionManager != null && sessionManager.IsSessionActive ? " — " + sessionManager.ActiveGameTitle : string.Empty);
             TxtApex6PcmControlStatus.ToolTip = status;
         }
-        private void OnPcmControlChanged() { Dispatcher.BeginInvoke(new Action(UpdatePcmControlStatus)); }
+        private void OnPcmControlChanged()
+        {
+            Dispatcher.BeginInvoke(new Action(() => { UpdatePcmControlStatus(); UpdateSettingsPcmMonitor(); }));
+        }
 
 
         #region APEX 6 PCM Extension UI
@@ -106,6 +109,31 @@ namespace ApexSenseBridgeTray
             pcmMeasurementGameKey = null;
             if (TxtApex6PcmMeasureAction != null)
                 TxtApex6PcmMeasureAction.Text = LocalizationManager.Get("Loc_Apex6PcmMeasureStart");
+            UpdateSettingsPcmMonitor();
+        }
+
+        // One measurement state, two views. The settings view follows the active
+        // engine session and mirrors the existing game-detail live meters.
+        private void UpdateSettingsPcmMonitor()
+        {
+            if (BtnSettingsPcmMeasure == null) return; // may run before InitializeComponent
+            var activeGame = sessionManager == null ? null : sessionManager.ActiveGameKey;
+            var hasSession = !string.IsNullOrWhiteSpace(activeGame) &&
+                             sessionManager != null &&
+                             !string.IsNullOrWhiteSpace(sessionManager.ActiveSessionToken);
+            BtnSettingsPcmMeasure.IsEnabled = isMeasuringPcm || hasSession;
+            TxtSettingsPcmMeasureAction.Text = LocalizationManager.Get(
+                isMeasuringPcm ? "Loc_Apex6PcmMeasureStop" : "Loc_Apex6PcmMeasureStart");
+            TxtSettingsPcmGame.Text = hasSession ? activeGame : LocalizationManager.Get("Loc_Apex6PcmDisconnected");
+            TxtSettingsPcmStatus.Text = (isMeasuringPcm || pcmStoppedSnapshot != null) &&
+                                         TxtApex6PcmLiveStatus != null
+                ? TxtApex6PcmLiveStatus.Text : LocalizationManager.Get("Loc_Apex6PcmNotMeasured");
+            if (PrgApex6PcmLiveL != null) PrgSettingsPcmInputL.Value = PrgApex6PcmLiveL.Value;
+            if (PrgApex6PcmLiveR != null) PrgSettingsPcmInputR.Value = PrgApex6PcmLiveR.Value;
+            if (PrgApex6PcmOutputL != null) PrgSettingsPcmOutputL.Value = PrgApex6PcmOutputL.Value;
+            if (PrgApex6PcmOutputR != null) PrgSettingsPcmOutputR.Value = PrgApex6PcmOutputR.Value;
+            TxtSettingsPcmPeak.Text = TxtApex6PcmMeasuredOutputPeak == null
+                ? string.Empty : TxtApex6PcmMeasuredOutputPeak.Text;
         }
 
         private void UpdateGlobalApex6PcmUi()
@@ -236,9 +264,9 @@ namespace ApexSenseBridgeTray
                 bool useGlobal = policy.UseGlobal;
                 if (ChkApex6PcmUseGlobal != null) ChkApex6PcmUseGlobal.IsChecked = useGlobal;
                 if (PnlApex6PcmCustomControls != null) PnlApex6PcmCustomControls.Visibility = Visibility.Visible;
-                if (CmbApex6PcmMode != null) CmbApex6PcmMode.IsEnabled = false;
+                if (CmbApex6PcmMode != null) CmbApex6PcmMode.IsEnabled = !useGlobal;
                 if (RowApex6PcmTarget != null) RowApex6PcmTarget.IsEnabled = !useGlobal;
-                if (RowApex6PcmLinear != null) RowApex6PcmLinear.IsEnabled = true;
+                if (RowApex6PcmLinear != null) RowApex6PcmLinear.IsEnabled = !useGlobal;
                 if (RowApex6PcmCompanding != null) RowApex6PcmCompanding.IsEnabled = !useGlobal;
 
                 if (CmbApex6PcmMode != null && CmbApex6PcmMode.Items.Count == 0)
@@ -315,10 +343,10 @@ namespace ApexSenseBridgeTray
                 int companding = policy.CompandingGainPercent;
                 SliderApex6PcmCompanding.Value = companding;
                 TxtBoxApex6PcmCompanding.Text = companding.ToString(CultureInfo.InvariantCulture);
-                RowApex6PcmCompanding.Visibility = Visibility.Collapsed;
+                RowApex6PcmCompanding.Visibility = currentMode == "companding" ? Visibility.Visible : Visibility.Collapsed;
                 if (RowApex6PcmReference != null) RowApex6PcmReference.Visibility = Visibility.Visible;
                 if (RowApex6PcmTarget != null) RowApex6PcmTarget.Visibility = Visibility.Collapsed;
-                if (RowApex6PcmLinear != null) RowApex6PcmLinear.Visibility = Visibility.Visible;
+                if (RowApex6PcmLinear != null) RowApex6PcmLinear.Visibility = currentMode == "linear" ? Visibility.Visible : Visibility.Collapsed;
 
                 UpdateApex6PcmEffectiveGainDisplay(currentMode, refPct, targetPct, linearPct);
                 UpdateApex6PcmLinearRecommendation(policy);
@@ -407,6 +435,7 @@ namespace ApexSenseBridgeTray
             if (gameSettings == null) gameSettings = new Apex6PcmGameSettings();
 
             gameSettings.Mode = (item.Tag as string) ?? "linear";
+            gameSettings.UseGlobal = false;
             settings.SetApex6PcmGameSettings(game.Normalized, gameSettings);
             QueuePcmEdit();
 
@@ -563,13 +592,29 @@ namespace ApexSenseBridgeTray
 
         private void OnApex6PcmStartMeasureClick(object sender, RoutedEventArgs e)
         {
-            if (SelectedGame == null || settings == null) return;
+            TogglePcmMeasurement(SelectedGame == null ? null : SelectedGame.Normalized, sender, e);
+            UpdateSettingsPcmMonitor();
+        }
+
+        // Settings monitors the actual engine session rather than whichever game
+        // happens to be highlighted in the catalogue.
+        private void OnSettingsPcmMeasureClick(object sender, RoutedEventArgs e)
+        {
+            var gameKey = isMeasuringPcm ? pcmMeasurementGameKey :
+                sessionManager == null ? null : sessionManager.ActiveGameKey;
+            TogglePcmMeasurement(gameKey, sender, e);
+            UpdateSettingsPcmMonitor();
+        }
+
+        private void TogglePcmMeasurement(string requestedGameKey, object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(requestedGameKey) || settings == null) return;
 
             if (!isMeasuringPcm)
             {
                 DisconnectPcmMeasurement();
                 pcmMeasurementToken = sessionManager != null ? sessionManager.ActiveSessionToken : null;
-                pcmMeasurementGameKey = SelectedGame.Normalized;
+                pcmMeasurementGameKey = requestedGameKey;
                 if (!PcmSessionMatches())
                 {
                     MessageBox.Show(this, "Start the bridge for the selected game before measuring.", "PCM measurement");
@@ -782,6 +827,7 @@ namespace ApexSenseBridgeTray
 
             if (TxtApex6PcmMeasureAction != null)
                 TxtApex6PcmMeasureAction.Text = LocalizationManager.Get("Loc_Apex6PcmMeasureStart");
+            UpdateSettingsPcmMonitor();
         }
 
         private void OnPcmLiveTimerTick(object sender, EventArgs e)
@@ -821,6 +867,7 @@ namespace ApexSenseBridgeTray
                         maxPct, maxOutputLeft8 * 100.0 / 127.0, maxOutputRight8 * 100.0 / 127.0,
                         clippedSamples, (maxOutputLeft8 == 127 || maxOutputRight8 == 127) ? " | 100% reached" : "");
                 }
+                UpdateSettingsPcmMonitor();
             }
             catch { }
         }
