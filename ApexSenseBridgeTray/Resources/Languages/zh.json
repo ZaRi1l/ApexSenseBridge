@@ -378,5 +378,10 @@
   "Loc_GyroSensorOk": "正常",
   "Loc_GyroSensorStill": "静止",
   "Loc_SteamAlreadyRunningTitle": "Steam已在运行",
-  "Loc_SteamAlreadyRunningBody": "Steam在控制器被隐藏时已在运行。如果看到重复输入，请完全退出Steam，然后在Bridge活跃时重新打开它。对游戏禁用Steam Input。"
+  "Loc_SteamAlreadyRunningBody": "Steam在控制器被隐藏时已在运行。如果看到重复输入，请完全退出Steam，然后在Bridge活跃时重新打开它。对游戏禁用Steam Input。",
+  "Loc_Apex6PcmMonitorTitle": "实时 PCM 监视器",
+  "Loc_Apex6PcmInputChannels": "输入 PCM（左 / 右）",
+  "Loc_Apex6PcmOutputChannels": "输出 PCM（左 / 右）",
+  "Loc_Apex6PcmGlobalScopeHint": "适用于未设置独立 PCM 参数的游戏的默认值。",
+  "Loc_Apex6PcmMonitorIdle": "开始测量以查看当前游戏的 PCM 信号。"
 }
