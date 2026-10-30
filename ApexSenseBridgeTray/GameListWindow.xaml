@@ -1211,6 +1211,14 @@
                                                     </StackPanel>
                                                 </Border>
                                             </StackPanel>
+                                            <Border x:Name="RowGripVibrations" Style="{StaticResource SettingRow}" Cursor="Hand"
+                                                    MouseLeftButtonDown="OnGripVibrationsRowClick">
+                                                <DockPanel>
+                                                    <CheckBox x:Name="ChkGripVibrations" DockPanel.Dock="Right" Style="{StaticResource SwitchCheckBox}"
+                                                              VerticalAlignment="Center" Click="OnGripVibrationsChanged"/>
+                                                    <TextBlock Text="{DynamicResource Loc_EnableRumble}" Style="{StaticResource RowLabel}"/>
+                                                </DockPanel>
+                                            </Border>
                                             <StackPanel x:Name="PnlApex6PcmGlobalSettings" Visibility="Collapsed">
                                                 <!-- APEX 6-only PCM defaults; global vibration strength stays separate. -->
                                                 <TextBlock Text="{DynamicResource Loc_Apex6PcmTitle}" Style="{StaticResource SectionTitle}" Margin="4,12,0,5"/>
@@ -1307,14 +1315,7 @@
                                                     </StackPanel>
                                                 </Border>
                                             </StackPanel>
-                                            <Border x:Name="RowGripVibrations" Style="{StaticResource SettingRow}" Cursor="Hand"
-                                                    MouseLeftButtonDown="OnGripVibrationsRowClick">
-                                                <DockPanel>
-                                                    <CheckBox x:Name="ChkGripVibrations" DockPanel.Dock="Right" Style="{StaticResource SwitchCheckBox}"
-                                                              VerticalAlignment="Center" Click="OnGripVibrationsChanged"/>
-                                                    <TextBlock Text="{DynamicResource Loc_EnableRumble}" Style="{StaticResource RowLabel}"/>
-                                                </DockPanel>
-                                            </Border>
+
                                         </StackPanel>
                                     </StackPanel>
                                 </Border>
