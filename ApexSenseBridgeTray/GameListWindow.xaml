@@ -1276,8 +1276,6 @@
                                                         </StackPanel>
                                                     </StackPanel>
                                                 </Border>
-                                            </StackPanel>
-                                            
                                                 <!-- Session-scoped live monitor; the game-detail monitor remains available. -->
                                                 <Border Style="{StaticResource SettingRow}" Margin="0,8,0,0">
                                                     <StackPanel>
@@ -1307,6 +1305,7 @@
                                                                    FontSize="10.5" TextWrapping="Wrap"/>
                                                     </StackPanel>
                                                 </Border>
+                                            </StackPanel>
                                             <Border x:Name="RowGripVibrations" Style="{StaticResource SettingRow}" Cursor="Hand"
                                                     MouseLeftButtonDown="OnGripVibrationsRowClick">
                                                 <DockPanel>
