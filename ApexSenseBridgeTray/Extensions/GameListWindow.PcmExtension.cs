@@ -767,7 +767,12 @@ namespace ApexSenseBridgeTray
 
                     double maxPct = max16 / 327.67;
                     double rawPct = rawPeak16 / 327.67;
-                    if (max16 > 0)
+                    // A Settings-tab measurement may target an active game that is
+                    // not currently selected in the catalogue. Never write that
+                    // game's observed peak into another game's detail controls.
+                    if (max16 > 0 && SelectedGame != null &&
+                        string.Equals(SelectedGame.Normalized, pcmMeasurementGameKey,
+                            StringComparison.OrdinalIgnoreCase))
                     {
                         if (TxtApex6PcmReference != null)
                             TxtApex6PcmReference.Text = string.Format("{0:F1}% ({1})", maxPct, max16);
