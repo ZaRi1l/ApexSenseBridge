@@ -487,9 +487,9 @@ namespace ApexSenseBridgeTray
             var items = new FrameworkElement[]
             {
                 TileSettingSyncLightbar, RowTriggerStrength, RowVibrationStrength,
-                RowGyroStrength, RowGyroYawStrength, RowVibrationThreshold,
+                RowGyroStrength, RowGyroYawStrength, RowVibrationThreshold, RowGripVibrations,
                 CmbGlobalApex6PcmMode, SliderGlobalApex6PcmLinear,
-                SliderGlobalApex6PcmCompanding, BtnSettingsPcmMeasure, RowGripVibrations
+                SliderGlobalApex6PcmCompanding, BtnSettingsPcmMeasure
             }.Where(item => item != null);
             return (navigableOnly ? items.Where(IsNavigable) : items).ToArray();
         }
