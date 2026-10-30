@@ -678,7 +678,7 @@
                                                 </DockPanel>
 
                                                 <!-- Use Global Toggle -->
-                                                <Border  Cursor="Hand" MouseLeftButtonDown="OnApex6PcmUseGlobalRowClick" Margin="0,0,0,6">
+                                                <Border Margin="0,0,0,6">
                                                     <DockPanel>
                                                         <CheckBox x:Name="ChkApex6PcmUseGlobal" DockPanel.Dock="Right" Style="{StaticResource SwitchCheckBox}"
                                                                   VerticalAlignment="Center" Click="OnApex6PcmUseGlobalChanged"/>
