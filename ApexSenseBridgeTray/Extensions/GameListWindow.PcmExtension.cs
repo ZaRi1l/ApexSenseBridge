@@ -118,8 +118,16 @@ namespace ApexSenseBridgeTray
         {
             if (BtnSettingsPcmMeasure == null) return; // may run before InitializeComponent
             var activeGame = sessionManager == null ? null : sessionManager.ActiveGameKey;
-            var hasSession = !string.IsNullOrWhiteSpace(activeGame) &&
-                             sessionManager != null &&
+            var activeApex6 = sessionManager != null &&
+                string.Equals(sessionManager.ActiveController, "apex6", StringComparison.OrdinalIgnoreCase);
+            // Do not hide session-owned controls merely because the HID device
+            // cannot be probed independently while the bridge is active.
+            if (activeApex6)
+            {
+                if (PnlControllerEffects != null) PnlControllerEffects.Visibility = Visibility.Visible;
+                if (PnlApex6PcmGlobalSettings != null) PnlApex6PcmGlobalSettings.Visibility = Visibility.Visible;
+            }
+            var hasSession = activeApex6 && !string.IsNullOrWhiteSpace(activeGame) &&
                              !string.IsNullOrWhiteSpace(sessionManager.ActiveSessionToken);
             BtnSettingsPcmMeasure.IsEnabled = isMeasuringPcm || hasSession;
             TxtSettingsPcmMeasureAction.Text = LocalizationManager.Get(
