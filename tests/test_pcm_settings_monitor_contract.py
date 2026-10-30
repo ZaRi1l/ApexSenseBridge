@@ -27,7 +27,7 @@ class PcmSettingsMonitorContracts(unittest.TestCase):
         for name in (
             "PnlApex6PcmGlobalSettings", "CmbGlobalApex6PcmMode",
             "SliderGlobalApex6PcmLinear", "BtnSettingsPcmMeasure",
-            "PrgSettingsPcmInputL", "PrgSettingsPcmInputR",
+            "PnlSettingsPcmMeter", "PrgSettingsPcmInputL", "PrgSettingsPcmInputR",
             "PrgSettingsPcmOutputL", "PrgSettingsPcmOutputR",
             "TxtSettingsPcmStatus", "TxtSettingsPcmPeak",
             "ChkApex6PcmUseGlobal", "CmbApex6PcmMode",
@@ -57,6 +57,8 @@ class PcmSettingsMonitorContracts(unittest.TestCase):
         self.assertIn('string.Equals(SelectedGame.Normalized, pcmMeasurementGameKey,', self.pcm)
         self.assertIn('settings.SetApex6PcmGameSettings(gameKey, gameSettings);', self.pcm)
         self.assertIn('UpdateSettingsPcmMonitor();', self.pcm)
+        self.assertIn('PnlSettingsPcmMeter.Visibility = (isMeasuringPcm || pcmStoppedSnapshot != null)', self.pcm)
+        self.assertIn('x:Name="PnlSettingsPcmMeter" Visibility="Collapsed"', self.xaml)
 
     def test_game_override_and_existing_meter_preserved(self):
         self.assertIn('gameSettings.UseGlobal = false;', self.pcm)
