@@ -378,5 +378,10 @@
   "Loc_GyroSensorOk": "正常",
   "Loc_GyroSensorStill": "静止中",
   "Loc_SteamAlreadyRunningTitle": "Steamは既に実行中です",
-  "Loc_SteamAlreadyRunningBody": "コントローラーが隠された時、Steamは既に実行中でした。重複した入力が見られる場合は、Steamを完全に終了してからBridgeがアクティブな状態で再度開いてください。ゲームのSteam Inputは無効にしてください。"
+  "Loc_SteamAlreadyRunningBody": "コントローラーが隠された時、Steamは既に実行中でした。重複した入力が見られる場合は、Steamを完全に終了してからBridgeがアクティブな状態で再度開いてください。ゲームのSteam Inputは無効にしてください。",
+  "Loc_Apex6PcmMonitorTitle": "PCMリアルタイムモニター",
+  "Loc_Apex6PcmInputChannels": "入力PCM（左／右）",
+  "Loc_Apex6PcmOutputChannels": "出力PCM（左／右）",
+  "Loc_Apex6PcmGlobalScopeHint": "ゲーム別PCM設定がないゲームに適用される初期値です。",
+  "Loc_Apex6PcmMonitorIdle": "測定を開始すると、実行中のゲームのPCM信号を確認できます。"
 }
