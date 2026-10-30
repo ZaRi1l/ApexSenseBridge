@@ -378,5 +378,10 @@
   "Loc_GyroSensorOk": "исправен",
   "Loc_GyroSensorStill": "неподвижен",
   "Loc_SteamAlreadyRunningTitle": "Steam уже был запущен",
-  "Loc_SteamAlreadyRunningBody": "Steam был запущен при скрытии контроллера. Если вы видите повторяющиеся входные данные, полностью закройте Steam и снова откройте его, пока Bridge активен. Отключите Steam Input для игры."
+  "Loc_SteamAlreadyRunningBody": "Steam был запущен при скрытии контроллера. Если вы видите повторяющиеся входные данные, полностью закройте Steam и снова откройте его, пока Bridge активен. Отключите Steam Input для игры.",
+  "Loc_Apex6PcmMonitorTitle": "Монитор PCM в реальном времени",
+  "Loc_Apex6PcmInputChannels": "Вход PCM (лев. / прав.)",
+  "Loc_Apex6PcmOutputChannels": "Выход PCM (лев. / прав.)",
+  "Loc_Apex6PcmGlobalScopeHint": "Параметры по умолчанию для игр без индивидуальной настройки PCM.",
+  "Loc_Apex6PcmMonitorIdle": "Начните измерение, чтобы проверить PCM-сигнал активной игры."
 }
