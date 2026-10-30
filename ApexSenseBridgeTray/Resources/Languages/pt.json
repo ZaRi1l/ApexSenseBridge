@@ -378,5 +378,10 @@
   "Loc_GyroSensorOk": "saudável",
   "Loc_GyroSensorStill": "estacionário",
   "Loc_SteamAlreadyRunningTitle": "Steam já estava em execução",
-  "Loc_SteamAlreadyRunningBody": "Steam estava em execução quando o controlador foi ocultado. Se você vir entradas duplicadas, saia completamente do Steam e reabra-o enquanto o Bridge está ativo. Mantenha o Steam Input desabilitado para o jogo."
+  "Loc_SteamAlreadyRunningBody": "Steam estava em execução quando o controlador foi ocultado. Se você vir entradas duplicadas, saia completamente do Steam e reabra-o enquanto o Bridge está ativo. Mantenha o Steam Input desabilitado para o jogo.",
+  "Loc_Apex6PcmMonitorTitle": "Monitor PCM em tempo real",
+  "Loc_Apex6PcmInputChannels": "PCM de entrada (esq. / dir.)",
+  "Loc_Apex6PcmOutputChannels": "PCM de saída (esq. / dir.)",
+  "Loc_Apex6PcmGlobalScopeHint": "Padrões para jogos sem ajuste PCM individual.",
+  "Loc_Apex6PcmMonitorIdle": "Inicie a medição para ver o sinal PCM do jogo ativo."
 }
