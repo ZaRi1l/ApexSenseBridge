@@ -2,7 +2,7 @@ name: Validate APEX 6 Extension
 
 on:
   push:
-    branches: [Extension]
+    branches: [Extension, feature/upstream-ready-pcm-ui]
   workflow_dispatch:
 
 permissions:
@@ -55,6 +55,7 @@ jobs:
             'tests/test_pcm_focus_session_regression.py',
             'tests/test_bridge_options_apex6_pcm.py',
             'tests/test_pcm_wpf_contract.py',
+            'tests/test_pcm_settings_monitor_contract.py',
             'tests/test_tray_pcm_settings.py',
             'tests/test_ui_contracts.py',
             'tests/test_apex6_telemetry.py'
