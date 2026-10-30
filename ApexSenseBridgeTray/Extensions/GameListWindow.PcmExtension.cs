@@ -130,6 +130,11 @@ namespace ApexSenseBridgeTray
             var hasSession = activeApex6 && !string.IsNullOrWhiteSpace(activeGame) &&
                              !string.IsNullOrWhiteSpace(sessionManager.ActiveSessionToken);
             BtnSettingsPcmMeasure.IsEnabled = isMeasuringPcm || hasSession;
+            // Keep the idle preferences page compact. Reveal the four live
+            // channels only while measuring or when a completed capture exists.
+            if (PnlSettingsPcmMeter != null)
+                PnlSettingsPcmMeter.Visibility = (isMeasuringPcm || pcmStoppedSnapshot != null)
+                    ? Visibility.Visible : Visibility.Collapsed;
             TxtSettingsPcmMeasureAction.Text = LocalizationManager.Get(
                 isMeasuringPcm ? "Loc_Apex6PcmMeasureStop" : "Loc_Apex6PcmMeasureStart");
             TxtSettingsPcmGame.Text = hasSession ? activeGame : LocalizationManager.Get("Loc_Apex6PcmDisconnected");
