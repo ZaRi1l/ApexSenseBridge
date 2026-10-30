@@ -378,5 +378,10 @@
   "Loc_GyroSensorOk": "operativo",
   "Loc_GyroSensorStill": "inmóvil",
   "Loc_SteamAlreadyRunningTitle": "Steam ya estaba en ejecución",
-  "Loc_SteamAlreadyRunningBody": "Steam estaba en ejecución cuando se ocultó el controlador. Si ve entradas duplicadas, cierre Steam por completo y reabralo mientras el bridge está activo. Mantenga Steam Input deshabilitado para el juego."
+  "Loc_SteamAlreadyRunningBody": "Steam estaba en ejecución cuando se ocultó el controlador. Si ve entradas duplicadas, cierre Steam por completo y reabralo mientras el bridge está activo. Mantenga Steam Input deshabilitado para el juego.",
+  "Loc_Apex6PcmMonitorTitle": "Monitor PCM en tiempo real",
+  "Loc_Apex6PcmInputChannels": "PCM de entrada (izq. / der.)",
+  "Loc_Apex6PcmOutputChannels": "PCM de salida (izq. / der.)",
+  "Loc_Apex6PcmGlobalScopeHint": "Valores predeterminados para juegos sin ajustes PCM individuales.",
+  "Loc_Apex6PcmMonitorIdle": "Inicia la medición para ver la señal PCM del juego activo."
 }
