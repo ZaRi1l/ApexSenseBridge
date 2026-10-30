@@ -378,5 +378,10 @@
   "Loc_GyroSensorOk": "hoạt động tốt",
   "Loc_GyroSensorStill": "đứng yên",
   "Loc_SteamAlreadyRunningTitle": "Steam đã chạy trước đó",
-  "Loc_SteamAlreadyRunningBody": "Steam đã chạy khi bộ điều khiển bị ẩn. Nếu bạn thấy đầu vào trùng lặp, hãy thoát hoàn toàn Steam và mở lại nó trong khi Bridge đang hoạt động. Vô hiệu hóa Steam Input cho trò chơi."
+  "Loc_SteamAlreadyRunningBody": "Steam đã chạy khi bộ điều khiển bị ẩn. Nếu bạn thấy đầu vào trùng lặp, hãy thoát hoàn toàn Steam và mở lại nó trong khi Bridge đang hoạt động. Vô hiệu hóa Steam Input cho trò chơi.",
+  "Loc_Apex6PcmMonitorTitle": "Giám sát PCM thời gian thực",
+  "Loc_Apex6PcmInputChannels": "PCM đầu vào (trái / phải)",
+  "Loc_Apex6PcmOutputChannels": "PCM đầu ra (trái / phải)",
+  "Loc_Apex6PcmGlobalScopeHint": "Giá trị mặc định cho trò chơi không có thiết lập PCM riêng.",
+  "Loc_Apex6PcmMonitorIdle": "Bắt đầu đo để xem tín hiệu PCM của trò chơi đang chạy."
 }
