@@ -378,5 +378,10 @@
   "Loc_GyroSensorOk": "opérationnel",
   "Loc_GyroSensorStill": "immobile",
   "Loc_SteamAlreadyRunningTitle": "Steam était déjà ouvert",
-  "Loc_SteamAlreadyRunningBody": "Steam était ouvert quand la manette a été masquée. Si les commandes sont doublées, quittez complètement Steam puis rouvrez-le pendant que le bridge est actif. Laissez Steam Input désactivé pour ce jeu."
+  "Loc_SteamAlreadyRunningBody": "Steam était ouvert quand la manette a été masquée. Si les commandes sont doublées, quittez complètement Steam puis rouvrez-le pendant que le bridge est actif. Laissez Steam Input désactivé pour ce jeu.",
+  "Loc_Apex6PcmMonitorTitle": "Moniteur PCM en direct",
+  "Loc_Apex6PcmInputChannels": "PCM entrant (gauche / droite)",
+  "Loc_Apex6PcmOutputChannels": "PCM sortant (gauche / droite)",
+  "Loc_Apex6PcmGlobalScopeHint": "Valeurs par défaut pour les jeux sans réglage PCM spécifique.",
+  "Loc_Apex6PcmMonitorIdle": "Lancez la mesure pour inspecter le signal PCM du jeu actif."
 }
