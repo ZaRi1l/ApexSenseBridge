@@ -4,6 +4,7 @@
 
 #include "dualsense/Apex6HapticBridge.h"
 #include "dualsense/Apex6PcmGain.h"
+#include "dualsense/Apex6PcmLinear.h"
 #include "dualsense/Apex6TriggerEffect.h"
 #include "flydigi/Apex6Protocol.h"
 
@@ -315,6 +316,30 @@ void testPcmGainCurve() {
     assert(scaleApex6Pcm(1000, 0) == scaleApex6Pcm(1000));
 }
 
+void testLinearPcmGain() {
+    using asb::dualsense::scaleApex6Pcm;
+    using asb::dualsense::scaleApex6PcmLinear;
+    // Verify all 65536 signed PCM inputs, preserving upstream unity output.
+    for (int sample = -32768; sample <= 32767; ++sample) {
+        const auto pcm = static_cast<std::int16_t>(sample);
+        assert(scaleApex6PcmLinear(pcm, 0) == 0);
+        assert(scaleApex6PcmLinear(pcm, 100) == scaleApex6Pcm(pcm, 100));
+        int previous = 0;
+        for (const auto gain : {0U, 50U, 100U, 150U, 300U, 1000U}) {
+            const auto output = int(scaleApex6PcmLinear(pcm, gain));
+            assert(output >= -127 && output <= 127);
+            assert(sample >= 0 ? output >= 0 : output <= 0);
+            assert(std::abs(output) >= previous);
+            previous = std::abs(output);
+        }
+    }
+    assert(scaleApex6PcmLinear(32767, 1000) == 127);
+    assert(scaleApex6PcmLinear(-32768, 1000) == -127);
+    assert(scaleApex6PcmLinear(0, 1000) == 0);
+    assert(scaleApex6PcmLinear(10028, 300) == 117);
+    assert(scaleApex6PcmLinear(10028, 3000) == scaleApex6PcmLinear(10028, 1000));
+}
+
 void testApex6EnvelopeThresholdPolicy() {
     using namespace asb::dualsense;
     using namespace asb::flydigi;
@@ -334,7 +359,8 @@ void testApex6EnvelopeThresholdPolicy() {
 }
 
 void testStrength(unsigned strength, double threshold, int pcmAmplitude = 30000,
-                  unsigned gain = 100, bool leftOnly = false) {
+                  unsigned gain = 100, bool leftOnly = false,
+                  std::optional<unsigned> linearGain = std::nullopt) {
     using namespace asb::dualsense;
     using namespace asb::flydigi;
     auto* transport = new FakeApex6Transport();
@@ -343,7 +369,7 @@ void testStrength(unsigned strength, double threshold, int pcmAmplitude = 30000,
     assert(device.verifyIdentity(error));
     asb::haptics::HapticConfig config{};
     config.activationThreshold = threshold;
-    Apex6HapticBridge bridge(device, config, true, strength, strength, gain);
+    Apex6HapticBridge bridge(device, config, true, strength, strength, gain, linearGain);
     bridge.updateTriggerPositions(200, 200);
     assert(bridge.start(error));
     DualSenseFeedback trigger{};
@@ -372,18 +398,21 @@ void testStrength(unsigned strength, double threshold, int pcmAmplitude = 30000,
             maximumTrigger = (std::max)(maximumTrigger, std::abs(int(report[6 + sample * 3]) - 128));
         }
     }
+    const auto expectedPcm = [&](std::int16_t pcm) {
+        return linearGain ? scaleApex6PcmLinear(pcm, *linearGain) : scaleApex6Pcm(pcm, gain);
+    };
     if (strength == 0) assert(maximumGrip == 0);
-    else assert(maximumGrip == int(scaleApex6Pcm(static_cast<std::int16_t>(pcmAmplitude), gain)) * int(strength) / 100);
+    else assert(maximumGrip == int(expectedPcm(static_cast<std::int16_t>(pcmAmplitude))) * int(strength) / 100);
     if (strength == 0) assert(maximumTrigger == 0);
     else assert(maximumTrigger > 0 && maximumTrigger <= int(strength));
     const auto stats = bridge.stats();
     if (strength == 0) assert(stats.waveformActiveRendered == 0);
     else assert(stats.waveformActiveRendered > 0);
     assert(stats.waveformLeftThresholded == 0 && stats.waveformRightThresholded == 0);
-    assert(stats.pcmGainPercent == gain);
+    assert(stats.pcmGainPercent == linearGain.value_or(gain));
     assert(stats.pcmOutputLeftPeak == static_cast<unsigned>(maximumGrip));
     const auto expectedRight = leftOnly ? 0 :
-        std::abs(int(scaleApex6Pcm(static_cast<std::int16_t>(-pcmAmplitude), gain))) * int(strength) / 100;
+        std::abs(int(expectedPcm(static_cast<std::int16_t>(-pcmAmplitude)))) * int(strength) / 100;
     assert(stats.pcmOutputRightPeak == static_cast<unsigned>(expectedRight));
 }
 
@@ -465,6 +494,7 @@ int main() {
     testIdleSkipsFramesAndWakesImmediately();
     testNativeTriggerEffects();
     testPcmGainCurve();
+    testLinearPcmGain();
     testApex6EnvelopeThresholdPolicy();
     testBowEffect();
     testContinuousCarrierClock();
@@ -480,6 +510,10 @@ int main() {
     testStrength(50, 0.12, 1000, 150, true);
     testStrength(0, 0.12, 10028, 200);
     testStrength(100, 0.12, 32767, 200);
+    // Fake HID reports: opt-in Linear gain only changes native PCM samples.
+    testStrength(100, 0.12, 10028, 100, false, 300);
+    testStrength(50, 0.12, 10028, 100, true, 300);
+    testStrength(100, 0.12, 30000, 100, false, 100);
 
     auto* transport = new FakeApex6Transport();
     Apex5Device device{TransportPtr(transport)};
