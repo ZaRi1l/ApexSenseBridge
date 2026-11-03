@@ -345,3 +345,61 @@ tag/version mismatch, a stale package, a bad checksum or an unsigned payload.
 
 - Distributed under the MIT License. See [LICENSE](LICENSE) for details.
 - Uses patched components from VIIPER, usbip-win2, and HidHide. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+
+---
+
+## Experimental APEX 6 Pro linear PCM gain (contribution preview)
+
+> **Not an official upstream release.** This isolated branch begins at upstream
+> `stable` and introduces only an opt-in **native APEX 6 Pro PCM** linear gain.
+> It deliberately leaves the Tray, Playnite, themes, localization, and gamepad
+> navigation **unchanged**. The full live meter and per-game UI remain in the
+> separate [Extended beta](https://github.com/ZaRi1l/ApexSenseBridge-Extended)
+> and are **not** included in this review branch.
+
+- **Default behavior is unchanged.** Without the new flag, native PCM uses
+  the existing upstream quantizer or existing 100–200% companding option.
+- `--apex6-linear-gain 0..1000`: linear sample scaling with bounded
+  8-bit saturation. `100` reproduces the original quantizer bit-for-bit.
+  `300` multiplies the *digital* PCM amplitude approximately 3x until clipping.
+- Requires `--rumble` and verified APEX 6 Pro hardware; cannot be combined
+  with `--apex6-haptic-gain`. Triggers, envelopes, ordinary rumble, and
+  APEX 4/5 processing are not changed.
+
+```powershell
+# Stop any existing Tray/Playnite bridge session before this manual test.
+.\ApexSenseBridge.exe bridge-triggers --rumble --apex6-linear-gain 100
+.\ApexSenseBridge.exe bridge-triggers --rumble --apex6-linear-gain 200
+```
+
+Run commands separately and launch the game **after** the bridge starts.
+This feature adjusts command samples, **not certified motor force**. Use short
+A/B samples; stop on abnormal heat, rough vibration, or noise. See the
+[bilingual contribution notes](docs/APEX6_LINEAR_PCM_CONTRIBUTION.md) for
+testing requirements, scope, and expected behavior.
+
+### 한국어 — APEX 6 Pro 선형 PCM 증폭 기능 (원본 기여 준비용)
+
+> **원작자의 공식 배포판이 아닙니다.** 이 브랜치는 원본 `stable`에서
+> 분기하여 **APEX 6 Pro 네이티브 PCM의 선형 증폭 기능만** 추가합니다.
+> 기존 Tray/Playnite의 화면 디자인·테마·다국어·게임패드 조작은 변경하지
+> 않았습니다. 게임별 설정 및 실시간 진동 측정 UI는
+> [Extended 베타](https://github.com/ZaRi1l/ApexSenseBridge-Extended)에
+> 유지되며, **이 최소 기여 브랜치에는 포함되지 않습니다.**
+
+- 기본 설정은 원본과 동일합니다. 새 옵션을 사용하지 않으면 기존
+  PCM 출력 및 기존 100~200% 압축형 증폭 동작이 유지됩니다.
+- `--apex6-linear-gain 0..1000`: PCM 디지털 신호를 같은 비율로 증폭하며,
+  최대 8비트 신호 범위를 넘으면 포화(클리핑)됩니다.
+  `100`은 원본 출력과 비트 단위로 같고, `300`은 포화되기 전까지
+  디지털 신호를 약 3배로 조절합니다.
+- `--rumble` 및 APEX 6 Pro 모델 확인이 필수이며,
+  기존 `--apex6-haptic-gain`과 동시에 사용할 수 없습니다.
+  APEX 4/5, 트리거, 일반 럼블·엔벌로프 경로는 변경하지 않습니다.
+
+상단 명령어를 **한 번에 하나씩** 실행하고 브릿지를 시작한 후 게임을
+실행하세요. 기존 프로그램과 동시 실행하지 마세요. 설정값은 물리적
+모터 힘의 배율이 아니며, 발열·이상음·거친 진동이 있으면 즉시 중단하세요.
+자세한 확인 항목은 [한국어/영어 기여 안내](docs/APEX6_LINEAR_PCM_CONTRIBUTION.md)를
+참고하세요.
