@@ -1,5 +1,6 @@
 #include "dualsense/Apex6HapticBridge.h"
 #include "dualsense/Apex6PcmGain.h"
+#include "dualsense/Apex6PcmLinear.h"
 #include "dualsense/EffectStrength.h"
 
 #include <algorithm>
@@ -101,10 +102,13 @@ void updateMaximum(std::atomic_uint64_t& target, std::uint64_t value) noexcept {
 Apex6HapticBridge::Apex6HapticBridge(flydigi::Apex5Device& device,
                                      haptics::HapticConfig config,
                                      bool routeGrips, unsigned triggerStrengthPercent,
-                                     unsigned vibrationStrengthPercent, unsigned pcmGainPercent)
+                                     unsigned vibrationStrengthPercent, unsigned pcmGainPercent,
+                                     std::optional<unsigned> pcmLinearGainPercent)
     : device_(device), hapticProcessor_(apex6HapticConfig(config)), routeGrips_(routeGrips),
       triggerStrengthPercent_(triggerStrengthPercent), vibrationStrengthPercent_(vibrationStrengthPercent),
-      pcmGainPercent_(std::clamp(pcmGainPercent, 100U, 200U)) {}
+      pcmGainPercent_(std::clamp(pcmGainPercent, 100U, 200U)),
+      pcmLinearGainPercent_(pcmLinearGainPercent ?
+          std::optional<unsigned>{std::clamp(*pcmLinearGainPercent, 0U, 1000U)} : std::nullopt) {}
 
 Apex6HapticBridge::~Apex6HapticBridge() {
     std::string ignored;
@@ -487,7 +491,9 @@ flydigi::apex6::MotorBlock Apex6HapticBridge::renderBlock(
     }
     for (std::size_t index = 0; routeGrips_ && index < output.size(); ++index) {
         if (leftPcmActive) {
-            output[index].leftGrip = scaleApex6Pcm(waveform->left[index], pcmGainPercent_);
+            output[index].leftGrip = pcmLinearGainPercent_
+                ? scaleApex6PcmLinear(waveform->left[index], *pcmLinearGainPercent_)
+                : scaleApex6Pcm(waveform->left[index], pcmGainPercent_);
         } else if (leftEnvelope) {
             output[index].leftGrip = sineSample(
                 leftGripPhase_, 85.0, envelope.lowFrequency);
@@ -497,7 +503,9 @@ flydigi::apex6::MotorBlock Apex6HapticBridge::renderBlock(
                 rumbleLow);
         }
         if (rightPcmActive) {
-            output[index].rightGrip = scaleApex6Pcm(waveform->right[index], pcmGainPercent_);
+            output[index].rightGrip = pcmLinearGainPercent_
+                ? scaleApex6PcmLinear(waveform->right[index], *pcmLinearGainPercent_)
+                : scaleApex6Pcm(waveform->right[index], pcmGainPercent_);
         } else if (rightEnvelope) {
             output[index].rightGrip = sineSample(
                 rightGripPhase_, 85.0, envelope.highFrequency);
@@ -723,7 +731,7 @@ Apex6HapticBridgeStats Apex6HapticBridge::stats() const noexcept {
     result.waveformMaximumAgeUs = waveformMaximumAgeUs_.load(std::memory_order_relaxed);
     result.waveformTotalAgeUs = waveformTotalAgeUs_.load(std::memory_order_relaxed);
     result.waveformActiveRendered = waveformActiveRendered_.load(std::memory_order_relaxed);
-    result.pcmGainPercent = pcmGainPercent_;
+    result.pcmGainPercent = pcmLinearGainPercent_.value_or(pcmGainPercent_);
     result.pcmOutputLeftPeak = pcmOutputLeftPeak_.load(std::memory_order_relaxed);
     result.pcmOutputRightPeak = pcmOutputRightPeak_.load(std::memory_order_relaxed);
     result.gripEnvelopeFrames = gripEnvelopeFrames_.load(std::memory_order_relaxed);
