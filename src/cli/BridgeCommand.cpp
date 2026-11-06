@@ -151,9 +151,10 @@ int commandBridgeTriggers(int argc, char** argv) {
     if (candidateSelection.candidates > 1)
         std::cout << asb::cli::describeCandidateSelection(candidateSelection, *device) << std::endl;
     const bool apex6Pro = device->identity() && device->identity()->isApex6();
-    if (options.apex6HapticGainExplicit && !apex6Pro) {
-        constexpr std::string_view message =
-            "--apex6-haptic-gain requires a verified Apex 6 Pro.";
+    if ((options.apex6HapticGainExplicit || options.apex6LinearGainExplicit) && !apex6Pro) {
+        const std::string_view message = options.apex6LinearGainExplicit
+            ? "--apex6-linear-gain requires a verified Apex 6 Pro."
+            : "--apex6-haptic-gain requires a verified Apex 6 Pro.";
         std::cerr << message << '\n';
         return failSession(2, message);
     }
@@ -384,7 +385,9 @@ int commandBridgeTriggers(int argc, char** argv) {
     auto apex6Bridge = apex6Pro
         ? std::make_unique<asb::dualsense::Apex6HapticBridge>(
               *device, hapticConfig, options.routeRumble, options.triggerStrengthPercent,
-              options.vibrationStrengthPercent, options.apex6HapticGainPercent)
+              options.vibrationStrengthPercent, options.apex6HapticGainPercent,
+              options.apex6LinearGainExplicit
+                  ? std::optional<unsigned>{options.apex6LinearGainPercent} : std::nullopt)
         : std::unique_ptr<asb::dualsense::Apex6HapticBridge>{};
     if (apex6Bridge) {
         apex6Bridge->updateTriggerPositions(initialInput.l2, initialInput.r2);
@@ -839,9 +842,16 @@ int commandBridgeTriggers(int argc, char** argv) {
         }
     }
     if (apex6Pro && options.routeRumble) {
-        std::cout << "apex6_pcm_gain_percent=" << options.apex6HapticGainPercent << std::endl;
+        std::cout << "apex6_pcm_gain_percent="
+                  << (options.apex6LinearGainExplicit ? options.apex6LinearGainPercent
+                                                      : options.apex6HapticGainPercent)
+                  << std::endl;
         std::cout << "apex6_haptic_threshold_percent=0" << std::endl;
-        if (options.apex6HapticGainPercent > 100) {
+        if (options.apex6LinearGainExplicit) {
+            std::cerr << "Experimental APEX 6 linear PCM gain (" << options.apex6LinearGainPercent
+                      << "%): saturating digital scaling, not physical motor force. "
+                         "Stop if vibration feels harsh or the controller overheats.\n";
+        } else if (options.apex6HapticGainPercent > 100) {
             std::cerr << "Experimental Apex 6 native PCM gain enabled: quiet amplitudes are "
                          "increased with bounded compression, not a linear multiplier. "
                          "Trigger effects and native frequencies are not retuned.\n";

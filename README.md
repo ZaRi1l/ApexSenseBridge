@@ -393,3 +393,11 @@ tag/version mismatch, a stale package, a bad checksum or an unsigned payload.
 
 - Distributed under the MIT License. See [LICENSE](LICENSE) for details.
 - Uses patched components from VIIPER, usbip-win2, and HidHide. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+### Experimental APEX 6 Pro linear PCM gain / 선형 PCM 증폭 (opt-in)
+
+For verified APEX 6 Pro devices, `bridge-triggers --rumble --apex6-linear-gain 0..1000` provides optional native PCM digital amplification. Default playback and the existing companding option remain unchanged. The options are mutually exclusive.
+
+APEX 6 Pro의 네이티브 PCM만 선택적으로 증폭합니다. 100%는 원본과 동일하고 0%는 무음이며, 기존 비선형 증폭 옵션과 동시에 사용할 수 없습니다. 실기 테스트 시 과도한 진동·발열에 주의하세요.
+
+[English / 한국어 contribution and verification guide](docs/APEX6_LINEAR_PCM_CONTRIBUTION.md)

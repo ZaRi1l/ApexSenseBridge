@@ -1,0 +1,42 @@
+name: Validate APEX 6 linear PCM against upstream dev
+
+on:
+  push:
+    branches:
+      - feature/upstream-linear-pcm-dev-sync-20261106
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v3
+      - name: Build Windows C++ engine and native tests
+        shell: powershell
+        run: |
+          .\scripts\build-windows.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build unchanged upstream WPF tray and run learning tests
+        shell: powershell
+        run: |
+          .\scripts\build-tray-app.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run all native CTest regression cases
+        shell: powershell
+        run: |
+          ctest --test-dir .\build-win -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Repeat APEX 6 haptic and CLI cases
+        shell: powershell
+        run: |
+          ctest --test-dir .\build-win -C Release --output-on-failure --repeat until-fail:3 -R "^(apex6_haptic_bridge|bridge_options)$"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

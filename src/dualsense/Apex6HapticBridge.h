@@ -128,7 +128,8 @@ public:
                                haptics::HapticConfig config = {},
                                bool routeGrips = true, unsigned triggerStrengthPercent = 100,
                                unsigned vibrationStrengthPercent = 100,
-                               unsigned pcmGainPercent = 100);
+                               unsigned pcmGainPercent = 100,
+                               std::optional<unsigned> pcmLinearGainPercent = std::nullopt);
     ~Apex6HapticBridge();
 
     Apex6HapticBridge(const Apex6HapticBridge&) = delete;
@@ -173,6 +174,7 @@ private:
     unsigned triggerStrengthPercent_ = 100;
     unsigned vibrationStrengthPercent_ = 100;
     unsigned pcmGainPercent_ = 100;
+    std::optional<unsigned> pcmLinearGainPercent_;
     std::uint64_t triggerSampleOffset_ = 0;
     mutable std::mutex stateMutex_;
     std::condition_variable stopSignal_;

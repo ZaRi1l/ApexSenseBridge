@@ -157,6 +157,20 @@ int main() {
     }
     assert(!parse({"--rumble", "--apex6-haptic-gain"}).succeeded);
     assert(!parse({"--apex6-haptic-gain", "150"}).succeeded);
+    for (const auto gain : {"0", "100", "300", "1000"}) {
+        const auto parsed = parse({"--rumble", "--apex6-linear-gain", gain});
+        assert(parsed.succeeded && parsed.options.apex6LinearGainExplicit);
+        assert(parsed.options.apex6LinearGainPercent == std::stoul(gain));
+        assert(!parsed.options.apex6HapticGainExplicit);
+    }
+    for (const auto gain : {"-1", "1001", "300junk", "1.5", "999999999999999999999"}) {
+        assert(!parse({"--rumble", "--apex6-linear-gain", gain}).succeeded);
+    }
+    assert(!parse({"--rumble", "--apex6-linear-gain"}).succeeded);
+    assert(!parse({"--apex6-linear-gain", "300"}).succeeded);
+    assert(!parse({"--rumble", "--apex6-haptic-gain", "150", "--apex6-linear-gain", "300"}).succeeded);
+    assert(!parse({"--rumble", "--apex6-linear-gain", "300", "--apex6-haptic-gain", "150"}).succeeded);
+    assert(usage.find("--apex6-linear-gain 0..1000") != std::string_view::npos);
     assert(usage.find("--apex6-haptic-gain 100..200") != std::string_view::npos);
     // The lightbar brightness limit is a plain percentage; it is accepted
     // without --sync-lightbar so launchers can always pass it.

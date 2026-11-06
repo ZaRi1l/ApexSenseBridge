@@ -198,6 +198,26 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
                 error = "--apex6-haptic-gain requires an integer percentage from 100 to 200.";
                 return false;
             }
+        } else if (value == "--apex6-linear-gain") {
+            constexpr std::string_view rangeError =
+                "--apex6-linear-gain requires an integer percentage from 0 to 1000.";
+            if (++i >= argc) {
+                error = rangeError;
+                return false;
+            }
+            try {
+                std::size_t consumed = 0;
+                const auto parsed = std::stoul(argv[i], &consumed);
+                if (argv[i][0] == '-' || consumed != std::string_view(argv[i]).size() ||
+                    parsed > 1000) {
+                    throw std::out_of_range("apex6-linear-gain");
+                }
+                options.apex6LinearGainPercent = static_cast<unsigned>(parsed);
+                options.apex6LinearGainExplicit = true;
+            } catch (...) {
+                error = rangeError;
+                return false;
+            }
         } else if (value == "--apex4-gyro-strength" ||
                    value == "--apex4-gyro-yaw-strength") {
             if (++i >= argc) {
@@ -326,8 +346,16 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
         error = "--session-owner-pid requires --session-token.";
         return false;
     }
+    if (options.apex6HapticGainExplicit && options.apex6LinearGainExplicit) {
+        error = "--apex6-haptic-gain and --apex6-linear-gain are mutually exclusive.";
+        return false;
+    }
     if (options.apex6HapticGainExplicit && !options.routeRumble) {
         error = "--apex6-haptic-gain requires --rumble.";
+        return false;
+    }
+    if (options.apex6LinearGainExplicit && !options.routeRumble) {
+        error = "--apex6-linear-gain requires --rumble.";
         return false;
     }
     error.clear();
@@ -341,7 +369,7 @@ std::string_view bridgeCommandUsage() noexcept {
            "[--no-zone-emulation] [--sync-lightbar] [--lightbar-brightness 0..100] "
            "[--haptic-threshold 0..95] "
            "[--trigger-strength 0..100] [--vibration-strength 0..200] "
-           "[--apex6-haptic-gain 100..200] "
+           "[--apex6-haptic-gain 100..200] [--apex6-linear-gain 0..1000] "
            "[--controller-calibration MODEL:TRIGGER:VIBRATION:THRESHOLD:RUMBLE:RGB:GYRO:YAW[:RGBBRIGHTNESS]] "
            "[--apex4-gyro-strength 25..400] "
            "[--apex4-gyro-yaw-strength 25..400] "
@@ -378,6 +406,10 @@ bool applyControllerCalibration(BridgeCommandOptions& options,
     if (index != 1) options.apexProfileSlot.reset();
     if (options.apex6HapticGainExplicit && !options.routeRumble) {
         error = "--apex6-haptic-gain requires grip haptics in the selected calibration.";
+        return false;
+    }
+    if (options.apex6LinearGainExplicit && !options.routeRumble) {
+        error = "--apex6-linear-gain requires grip haptics in the selected calibration.";
         return false;
     }
     return true;
