@@ -413,8 +413,45 @@ namespace ApexSenseBridgeTray.Models
             ExcludedGames = new List<string>();
             ManualFixAllowedGames = new List<string>();
             ApexProfileSlots = new Dictionary<string, int>();
+            GameTunings = new Dictionary<string, GameTuning>(StringComparer.OrdinalIgnoreCase);
             Apex6PcmGlobal = new Apex6PcmGlobalSettings();
             Apex6PcmGames = new Dictionary<string, Apex6PcmGameSettings>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        public GameTuning GetGameTuning(string normalizedOrTitle)
+        {
+            if (string.IsNullOrWhiteSpace(normalizedOrTitle)) return null;
+            lock (this)
+            {
+                if (GameTunings == null) return null;
+                foreach (var item in GameTunings)
+                {
+                    if (item.Value != null &&
+                        string.Equals(item.Key, normalizedOrTitle.Trim(), StringComparison.OrdinalIgnoreCase))
+                        return item.Value.Clone();
+                }
+                return null;
+            }
+        }
+
+        public void SetGameTuning(string normalized, string title, GameTuning tuning)
+        {
+            lock (this)
+            {
+                if (GameTunings == null) GameTunings = new Dictionary<string, GameTuning>();
+                foreach (var key in new[] { normalized, title })
+                {
+                    if (string.IsNullOrWhiteSpace(key)) continue;
+                    var trimmed = key.Trim();
+                    string existing = null;
+                    foreach (var current in GameTunings.Keys)
+                    {
+                        if (string.Equals(current, trimmed, StringComparison.OrdinalIgnoreCase)) { existing = current; break; }
+                    }
+                    if (existing != null) GameTunings.Remove(existing);
+                    if (tuning != null) GameTunings[trimmed] = tuning.Clone();
+                }
+            }
         }
 
         public bool IsGameExcluded(string normalizedOrTitle)
