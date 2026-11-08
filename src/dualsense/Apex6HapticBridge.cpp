@@ -117,6 +117,17 @@ Apex6HapticBridge::Apex6HapticBridge(flydigi::Apex5Device& device,
     : Apex6HapticBridge(device, config, routeGrips, triggerStrengthPercent, vibrationStrengthPercent,
                         Apex6PcmConfig{Apex6PcmMode::Companding, 100, 0, 0, 90, 400, pcmGainPercent}) {}
 
+Apex6HapticBridge::Apex6HapticBridge(flydigi::Apex5Device& device,
+                                     haptics::HapticConfig config,
+                                     bool routeGrips, unsigned triggerStrengthPercent,
+                                     unsigned vibrationStrengthPercent, unsigned pcmGainPercent,
+                                     std::optional<unsigned> pcmLinearGainPercent)
+    : Apex6HapticBridge(
+          device, config, routeGrips, triggerStrengthPercent, vibrationStrengthPercent,
+          pcmLinearGainPercent
+              ? Apex6PcmConfig{Apex6PcmMode::Linear, *pcmLinearGainPercent, 0, 0, 90, 400, 100}
+              : Apex6PcmConfig{Apex6PcmMode::Companding, 100, 0, 0, 90, 400, pcmGainPercent}) {}
+
 Apex6HapticBridge::~Apex6HapticBridge() {
     std::string ignored;
     (void)stop(ignored);
