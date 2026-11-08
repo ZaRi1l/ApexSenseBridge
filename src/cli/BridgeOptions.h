@@ -52,6 +52,7 @@ struct BridgeCommandOptions {
     bool apex6HapticGainExplicit = false;
     // Preserve the Nov 6 CLI switch as an alias for the Extended PCM module.
     bool apex6LinearGainExplicit = false;
+    unsigned int apex6LinearGainPercent = 100;
     asb::dualsense::Apex6PcmConfig apex6PcmConfig{};
     bool apex6PcmOptionsExplicit = false;
     unsigned int apex4GyroStrengthPercent = 100;
