@@ -249,9 +249,13 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
         } else if (value == "--apex6-pcm-ignore-vibration-strength") {
             options.apex6PcmConfig.ignoreVibrationStrength = true;
             options.apex6PcmOptionsExplicit = true;
-        } else if (value == "--apex6-pcm-linear-gain-percent") {
+        } else if (value == "--apex6-pcm-linear-gain-percent" ||
+                   value == "--apex6-linear-gain") {
+            const bool nov6Alias = value == "--apex6-linear-gain";
+            const std::string optionName = nov6Alias ? "--apex6-linear-gain"
+                                                    : "--apex6-pcm-linear-gain-percent";
             if (++i >= argc) {
-                error = "--apex6-pcm-linear-gain-percent requires an integer percentage from 0 to 1000.";
+                error = optionName + " requires an integer percentage from 0 to 1000.";
                 return false;
             }
             try {
@@ -262,8 +266,12 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
                 }
                 options.apex6PcmConfig.linearGainPercent = static_cast<unsigned>(parsed);
                 options.apex6PcmOptionsExplicit = true;
+                if (nov6Alias) {
+                    options.apex6PcmConfig.mode = asb::dualsense::Apex6PcmMode::Linear;
+                    options.apex6LinearGainExplicit = true;
+                }
             } catch (...) {
-                error = "--apex6-pcm-linear-gain-percent requires an integer percentage from 0 to 1000.";
+                error = optionName + " requires an integer percentage from 0 to 1000.";
                 return false;
             }
         } else if (value == "--apex6-pcm-companding-gain-percent") {
@@ -415,6 +423,11 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
         error = "--session-owner-pid requires --session-token.";
         return false;
     }
+    if (options.apex6LinearGainExplicit &&
+        options.apex6PcmConfig.mode != asb::dualsense::Apex6PcmMode::Linear) {
+        error = "--apex6-linear-gain conflicts with a non-linear PCM mode.";
+        return false;
+    }
     if (options.apex6HapticGainExplicit && options.apex6PcmOptionsExplicit) {
         error = "Cannot combine legacy --apex6-haptic-gain with --apex6-pcm-* options.";
         return false;
@@ -446,6 +459,7 @@ std::string_view bridgeCommandUsage() noexcept {
            "[--haptic-threshold 0..95] "
            "[--trigger-strength 0..100] [--vibration-strength 0..200] "
            "[--apex6-haptic-gain 100..200] "
+           "[--apex6-linear-gain 0..1000] "
            "[--apex6-pcm-game-key UTF8KEY | --apex6-pcm-game-key-hex UTF8HEX] "
            "[--apex6-pcm-mode original|companding|linear] "
            "[--apex6-pcm-linear-gain-percent 0..1000] "
