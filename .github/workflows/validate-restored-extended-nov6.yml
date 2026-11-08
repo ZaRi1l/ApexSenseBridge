@@ -48,6 +48,20 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v3
 
+      - name: Setup Go for portable VIIPER components
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.5'
+          cache: false
+
+      - name: Build VIIPER sidecar and fallback required by portable package
+        shell: powershell
+        run: |
+          .\scripts\build-viiper-windows.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\scripts\build-libviiper-windows.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Build native engine and tests
         shell: powershell
         run: |
