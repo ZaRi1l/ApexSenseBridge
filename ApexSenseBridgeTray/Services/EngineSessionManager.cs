@@ -643,11 +643,11 @@ namespace ApexSenseBridgeTray.Services
             string pcmArgs = (settings != null ? settings.BuildApex6PcmArguments(gameKey) : string.Empty) +
                 (keyHex.Length == 0 ? string.Empty : " --apex6-pcm-game-key-hex " + keyHex);
             var arguments = BridgeArguments.Build(profileName, false, 12, false, apexProfileSlot,
-                100, 100, 100, 100, pcmArgs);
+                100, 100, 100, 100, pcmArgs, settings == null || settings.ZoneEmulation);
             // Send all model profiles; only the engine's verified device selects
             // one. A stale UI label / hot swap can never select another model's data.
             return arguments + (settings != null
-                ? settings.BuildControllerCalibrationArguments(settings.GetGameTuning(gameTitle))
+                ? settings.BuildControllerCalibrationArguments(settings.GetGameTuning(gameKey))
                 : string.Empty);
         }
     }
