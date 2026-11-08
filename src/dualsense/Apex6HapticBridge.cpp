@@ -198,6 +198,9 @@ void Apex6HapticBridge::handle(const DualSenseFeedback& feedback) {
         WaveformBlock block{feedback.audioSequence,
                             feedback.leftHapticSamples,
                             feedback.rightHapticSamples,
+                            feedback.hasRawAudioMeasurements ? feedback.rawAudioPeaks[2] : static_cast<std::uint16_t>(0),
+                            feedback.hasRawAudioMeasurements ? feedback.rawAudioPeaks[3] : static_cast<std::uint16_t>(0),
+                            feedback.hasRawAudioMeasurements,
                             Clock::now()};
         auto leftPeak = 0U;
         auto rightPeak = 0U;
@@ -411,6 +414,7 @@ flydigi::apex6::MotorBlock Apex6HapticBridge::renderBlock(
     flydigi::apex6::TriggerRoute& route,
     bool& triggerEnabled,
     Clock::time_point now) noexcept {
+    pcmExtension_.applyPending();
     flydigi::apex6::MotorBlock output{};
     std::array<std::int8_t, 8> leftTrigger;
     std::array<std::int8_t, 8> rightTrigger;
@@ -491,6 +495,9 @@ flydigi::apex6::MotorBlock Apex6HapticBridge::renderBlock(
     if (routeGrips_ && (leftRumble || rightRumble)) {
         gripRumbleFrames_.fetch_add(1, std::memory_order_relaxed);
     }
+    unsigned clippedSamplesCount = 0;
+    std::uint16_t currentLeftPeak16 = 0;
+    std::uint16_t currentRightPeak16 = 0;
     for (std::size_t index = 0; routeGrips_ && index < output.size(); ++index) {
         if (leftPcmActive) {
             output[index].leftGrip = pcmLinearGainPercent_
@@ -517,12 +524,24 @@ flydigi::apex6::MotorBlock Apex6HapticBridge::renderBlock(
                 rumbleHigh);
         }
     }
+    if (routeGrips_ && (leftPcmActive || rightPcmActive)) {
+        pcmProcessedSamples_.fetch_add(output.size() *
+            (static_cast<unsigned>(leftPcmActive) + static_cast<unsigned>(rightPcmActive)),
+            std::memory_order_relaxed);
+        if (clippedSamplesCount > 0) {
+            pcmOutputClippedSamples_.fetch_add(clippedSamplesCount, std::memory_order_relaxed);
+        }
+    }
 
+    const bool bypassPcmVibrationStrength = pcmExtension_.ignoreGlobalStrengthForPcm();
     unsigned leftPcmOutputPeak = 0;
     unsigned rightPcmOutputPeak = 0;
     for (std::size_t index = 0; index < output.size(); ++index) {
-        output[index].leftGrip = scaleEffectStrength(output[index].leftGrip, vibrationStrengthPercent_);
-        output[index].rightGrip = scaleEffectStrength(output[index].rightGrip, vibrationStrengthPercent_);
+        // Bypass only native PCM channels, never rumble/envelopes or triggers.
+        if (!bypassPcmVibrationStrength || !leftPcmActive)
+            output[index].leftGrip = scaleEffectStrength(output[index].leftGrip, vibrationStrengthPercent_);
+        if (!bypassPcmVibrationStrength || !rightPcmActive)
+            output[index].rightGrip = scaleEffectStrength(output[index].rightGrip, vibrationStrengthPercent_);
         if (routeGrips_ && leftPcmActive) {
             leftPcmOutputPeak = (std::max)(leftPcmOutputPeak,
                 static_cast<unsigned>(std::abs(int(output[index].leftGrip))));
@@ -536,6 +555,18 @@ flydigi::apex6::MotorBlock Apex6HapticBridge::renderBlock(
     }
     if (routeGrips_ && leftPcmActive) updateMaximum(pcmOutputLeftPeak_, leftPcmOutputPeak);
     if (routeGrips_ && rightPcmActive) updateMaximum(pcmOutputRightPeak_, rightPcmOutputPeak);
+    const auto blockRawL = waveform && waveform->hasRawMeasurements ? waveform->rawHapticLeftPeak : static_cast<std::uint16_t>(0);
+    const auto blockRawR = waveform && waveform->hasRawMeasurements ? waveform->rawHapticRightPeak : static_cast<std::uint16_t>(0);
+    pcmExtension_.publish(
+        currentLeftPeak16, currentRightPeak16,
+        blockRawL, blockRawR,
+        static_cast<std::uint8_t>(leftPcmOutputPeak),
+        static_cast<std::uint8_t>(rightPcmOutputPeak),
+        static_cast<std::uint8_t>(pcmAudioChannels_.load(std::memory_order_relaxed)),
+        pcmAudioVerified_.load(std::memory_order_relaxed),
+        waveformActiveDrops_.load(std::memory_order_relaxed),
+        pcmProcessedSamples_.load(std::memory_order_relaxed),
+        pcmOutputClippedSamples_.load(std::memory_order_relaxed));
     if ((leftPcmActive || rightPcmActive) &&
         std::any_of(output.begin(), output.end(), [leftPcmActive, rightPcmActive](const auto& sample) {
             return (leftPcmActive && sample.leftGrip != 0) ||

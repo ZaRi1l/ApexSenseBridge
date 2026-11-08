@@ -166,6 +166,8 @@ namespace ApexSenseBridge.Common
             catch (Exception ex) { logError("Session discovery unavailable: " + ex.Message); }
         }
 
+        public string Token { get; private set; }
+
         public int ProcessId
         {
             get
@@ -270,7 +272,7 @@ namespace ApexSenseBridge.Common
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
 
-                var session = new BridgeSession(logInfo, logError, ready, stop, mapping, view, progressMapping, progressView, process);
+                var session = new BridgeSession(logInfo, logError, ready, stop, mapping, view, progressMapping, progressView, process) { Token = token };
                 session.discoveryName = discoveryName;
                 ready = null;
                 stop = null;

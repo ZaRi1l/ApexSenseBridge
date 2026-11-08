@@ -7,6 +7,8 @@
 #include "dualsense/Apex6PcmLinear.h"
 #include "dualsense/Apex6TriggerEffect.h"
 #include "flydigi/Apex6Protocol.h"
+#include "platform/Apex6PcmControl.h"
+#include <cstring>
 
 #include <algorithm>
 #include <cassert>
@@ -466,7 +468,12 @@ void testIdleSkipsFramesAndWakesImmediately() {
     silent.kind = FeedbackKind::AudioHapticWaveform;
     silent.audioSequence = 1;
     bridge.handle(silent);
-    assert(bridge.stats().silentWaveformSkipped == 1);
+    // A keepalive may briefly clear idle_ while the audio worker runs. Whether
+    // this silent input was skipped immediately or consumed by that worker is
+    // timing-dependent; both are valid as long as it creates no motor output.
+    assert(bridge.stats().waveformSilentBlocks == 1);
+    assert(bridge.stats().pcmOutputLeftPeak == 0 &&
+           bridge.stats().pcmOutputRightPeak == 0);
 
     const auto framesBefore = bridge.stats().framesWritten;
     DualSenseFeedback active = silent;

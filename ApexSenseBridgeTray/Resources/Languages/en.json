@@ -55,7 +55,7 @@
   "Loc_SessionFailed": "Activation refused / error",
   "Loc_SessionEmpty": "Waiting",
   "Loc_AppName": "ApexSenseBridge",
-  "Loc_AppSubtitle": "DualSense \u2192 Flydigi APEX 4 / APEX 5 Bridge",
+  "Loc_AppSubtitle": "DualSense → Flydigi APEX 4 / APEX 5 Bridge",
   "Loc_AlreadyRunning": "ApexSenseBridge Tray is already running in the system tray.",
   "Loc_StartupError": "Startup error: ",
   "Loc_Close": "Close",

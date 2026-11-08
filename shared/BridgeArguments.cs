@@ -65,7 +65,12 @@ namespace ApexSenseBridge.Common
                 arguments.Add(apexProfileSlot.ToString(CultureInfo.InvariantCulture));
             }
 
-            return string.Join(" ", arguments.ToArray());
+            var result = string.Join(" ", arguments.ToArray());
+            if (!string.IsNullOrWhiteSpace(apex6PcmArguments))
+            {
+                result += apex6PcmArguments.StartsWith(" ") ? apex6PcmArguments : " " + apex6PcmArguments;
+            }
+            return result;
         }
 
         private static string NormalizeTouchpadProfile(string profile)

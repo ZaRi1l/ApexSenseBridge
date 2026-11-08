@@ -1,4 +1,5 @@
 #include "cli/BridgeOptions.h"
+#include "platform/Apex6PcmControl.h"
 
 #include "flydigi/Apex5Protocol.h"
 #include "platform/SessionControl.h"
@@ -338,6 +339,9 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
             return false;
         }
     }
+    const bool calibrationsSupplied = options.controllerCalibrations[0] ||
+                                      options.controllerCalibrations[1] ||
+                                      options.controllerCalibrations[2];
     if (options.hapticThresholdExplicit && !options.routeRumble) {
         error = "--haptic-threshold requires --rumble.";
         return false;
@@ -404,7 +408,7 @@ bool applyControllerCalibration(BridgeCommandOptions& options,
     options.apex4GyroStrengthPercent = c.gyro;
     options.apex4GyroYawStrengthPercent = c.gyroYaw;
     if (index != 1) options.apexProfileSlot.reset();
-    if (options.apex6HapticGainExplicit && !options.routeRumble) {
+    if (verifiedModel == "apex6" && options.apex6HapticGainExplicit && !options.routeRumble) {
         error = "--apex6-haptic-gain requires grip haptics in the selected calibration.";
         return false;
     }
