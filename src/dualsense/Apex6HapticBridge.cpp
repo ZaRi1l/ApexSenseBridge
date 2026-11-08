@@ -794,7 +794,8 @@ Apex6HapticBridgeStats Apex6HapticBridge::stats() const noexcept {
     result.waveformActiveRendered = waveformActiveRendered_.load(std::memory_order_relaxed);
     {
         const auto pcm = pcmExtension_.snapshot();
-        result.pcmGainPercent = pcm.legacyGainPercent;
+        result.pcmGainPercent = pcm.config.mode == Apex6PcmMode::Linear
+            ? pcm.config.linearGainPercent : pcm.legacyGainPercent;
         result.pcmMode = pcm.config.mode;
         result.pcmReferencePercent = pcm.config.referencePercent;
         result.pcmReferencePeakAbs16 = pcm.config.referencePeakAbs16;
