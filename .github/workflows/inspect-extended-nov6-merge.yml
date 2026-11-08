@@ -28,5 +28,11 @@ jobs:
             echo "=== $f ==="
             grep -nEi 'pcmExtension_|Apex6PcmExtension|PcmControl|PcmLiveMetrics|apex6-linear-gain|apex6-pcm|TxtApex6PcmMeasureAction|BtnSettingsPcmMeasure|Apex6PcmSettings' "$f" | head -n 55 || true
           done
+          echo '=== MERGED HAPTIC ROUTING LINES 480-580 ==='
+          sed -n '480,580p' src/dualsense/Apex6HapticBridge.cpp
+          echo '=== MERGED HAPTIC MEMBERS ==='
+          grep -n -E 'pcmExtension_|pcmLinearGainPercent_|pcmGainPercent_|Apex6HapticBridge\(' src/dualsense/Apex6HapticBridge.h || true
+          echo '=== MERGED COMMAND SESSIONS ==='
+          grep -n -E 'pcmConfig|pcmMode|pcmControl|pcmExtension|Apex6Pcm|pcmLinearGainPercent|apex6Pcm' src/cli/BridgeCommand.cpp | head -n 85 || true
           echo '=== Modified files ==='
           git diff --cached --name-only | head -n 100
