@@ -1,0 +1,91 @@
+name: Validate restored Extended on November 6 engine
+
+on:
+  push:
+    branches:
+      - work/extended-nov6-ui-merged-20261108
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: restored-extended-nov6-validation
+  cancel-in-progress: true
+
+jobs:
+  windows-build-test:
+    runs-on: windows-2022
+    timeout-minutes: 50
+    steps:
+      - name: Checkout integrated candidate with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Preflight full UI and Nov 6 engine wiring
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $haptic = Get-Content 'src/dualsense/Apex6HapticBridge.cpp' -Raw
+          $xaml = Get-Content 'ApexSenseBridgeTray/GameListWindow.xaml' -Raw
+          $opts = Get-Content 'src/cli/BridgeOptions.cpp' -Raw
+          $scaler = Get-Content 'src/dualsense/Apex6PcmNormalization.h' -Raw
+          foreach ($check in @(
+            @($haptic, 'pcmExtension_.scale'),
+            @($haptic, 'pcmExtension_.publish'),
+            @($haptic, 'pcmExtension_.applyPending'),
+            @($xaml, 'TxtApex6PcmMeasureAction'),
+            @($xaml, 'BtnSettingsPcmMeasure'),
+            @($opts, '--apex6-linear-gain'),
+            @($opts, '--apex6-pcm-linear-gain-percent'),
+            @($scaler, 'scaleApex6PcmLinear')
+          )) {
+            if (-not $check[0].Contains($check[1])) { throw "Required feature missing: $($check[1])" }
+          }
+          Write-Host 'Extended monitoring, gain control and Nov 6 scaler routing are present.'
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v3
+
+      - name: Build native engine and tests
+        shell: powershell
+        run: |
+          .\scripts\build-windows.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build WPF Tray and learning tests
+        shell: powershell
+        run: |
+          .\scripts\build-tray-app.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run all native regression tests
+        shell: powershell
+        run: |
+          ctest --test-dir .\build-win -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Extended UI source-contract tests
+        shell: powershell
+        run: |
+          python tests/test_pcm_extension_isolation.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/test_pcm_wpf_contract.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/test_pcm_settings_monitor_contract.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build Windows portable ZIP
+        shell: powershell
+        run: |
+          .\scripts\build-portable.ps1 -SkipBuild
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload candidate ZIP (not public release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-extended-nov6-portable-candidate
+          path: dist/ApexSenseBridge-Portable.zip
+          retention-days: 7
+          if-no-files-found: error
