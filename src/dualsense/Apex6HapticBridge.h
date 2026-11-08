@@ -147,6 +147,13 @@ public:
                                bool routeGrips, unsigned triggerStrengthPercent,
                                unsigned vibrationStrengthPercent,
                                unsigned pcmGainPercent);
+    // Keep the Nov 6 constructor used by native regression tests and CLI clients.
+    explicit Apex6HapticBridge(flydigi::Apex5Device& device,
+                               haptics::HapticConfig config,
+                               bool routeGrips, unsigned triggerStrengthPercent,
+                               unsigned vibrationStrengthPercent,
+                               unsigned pcmGainPercent,
+                               std::optional<unsigned> pcmLinearGainPercent);
     ~Apex6HapticBridge();
 
     Apex6HapticBridge(const Apex6HapticBridge&) = delete;
