@@ -1,0 +1,32 @@
+name: Inspect November 6 Extended merge routing
+
+on:
+  push:
+    branches:
+      - work/extended-nov6-integration-20261108
+    paths:
+      - .github/workflows/inspect-extended-nov6-merge.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin feature/upstream-ready-pcm-ui
+          git -c user.name=Inspector -c user.email=inspector@localhost merge --no-commit --no-ff -X ours origin/feature/upstream-ready-pcm-ui
+          echo '=== PCM source routing after merge ==='
+          for f in src/dualsense/Apex6HapticBridge.h src/dualsense/Apex6HapticBridge.cpp src/cli/BridgeOptions.cpp src/cli/BridgeCommand.cpp ApexSenseBridgeTray/GameListWindow.xaml ApexSenseBridgeTray/GameListWindow.xaml.cs ApexSenseBridgeTray/Services/EngineSessionManager.cs; do
+            echo "=== $f ==="
+            grep -nEi 'pcmExtension_|Apex6PcmExtension|PcmControl|PcmLiveMetrics|apex6-linear-gain|apex6-pcm|TxtApex6PcmMeasureAction|BtnSettingsPcmMeasure|Apex6PcmSettings' "$f" | head -n 55 || true
+          done
+          echo '=== Modified files ==='
+          git diff --cached --name-only | head -n 100
