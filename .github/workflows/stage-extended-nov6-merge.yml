@@ -1,0 +1,34 @@
+name: Stage full Extended integration on November 6 code
+
+on:
+  push:
+    branches:
+      - work/extended-nov6-integration-20261108
+    paths:
+      - .github/workflows/stage-extended-nov6-merge.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  stage-merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source with complete history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Stage candidate on independent branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin feature/upstream-ready-pcm-ui
+          git config user.name 'ApexSenseBridge integration bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git merge --no-ff -X ours -m "chore: integrate Oct 30 Extended UI into Nov 6 dev core" origin/feature/upstream-ready-pcm-ui
+          git branch -f work/extended-nov6-merged-20261108 HEAD
+          git push origin HEAD:refs/heads/work/extended-nov6-merged-20261108
+          echo "Candidate commit $(git rev-parse HEAD)"
