@@ -16,8 +16,7 @@ namespace ApexSenseBridge.Common
             int vibrationStrengthPercent = 100,
             int apex4GyroStrengthPercent = 100,
             int apex4GyroYawStrengthPercent = 100,
-            bool zoneEmulation = true,
-            int lightbarBrightnessPercent = 100)
+            string apex6PcmArguments = null)
         {
             var arguments = new List<string>
             {
@@ -65,7 +64,12 @@ namespace ApexSenseBridge.Common
                 arguments.Add(apexProfileSlot.ToString(CultureInfo.InvariantCulture));
             }
 
-            return string.Join(" ", arguments.ToArray());
+            var result = string.Join(" ", arguments.ToArray());
+            if (!string.IsNullOrWhiteSpace(apex6PcmArguments))
+            {
+                result += apex6PcmArguments.StartsWith(" ") ? apex6PcmArguments : " " + apex6PcmArguments;
+            }
+            return result;
         }
 
         private static string NormalizeTouchpadProfile(string profile)

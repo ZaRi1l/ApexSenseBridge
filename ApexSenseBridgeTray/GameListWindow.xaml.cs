@@ -64,6 +64,17 @@ namespace ApexSenseBridgeTray
             this.updateChecker = updateChecker;
 
             InitializeComponent();
+            pcmEdits = new PcmEditDebouncer(() => { settings.Save(); sessionManager?.RefreshPcmPolicy(settings); });
+            pcmEditTimer.Tick += (s, e) => pcmEdits.Tick();
+            pcmEditTimer.Start();
+            foreach (var slider in new[] { SliderGlobalApex6PcmLinear, SliderGlobalApex6PcmCompanding, SliderGlobalApex6PcmTarget, SliderGlobalApex6PcmMaxGain, SliderApex6PcmLinear, SliderApex6PcmCompanding, SliderApex6PcmTarget, SliderApex6PcmMaxGain })
+            {
+                slider.AddHandler(System.Windows.Controls.Primitives.Thumb.DragCompletedEvent,
+                    new System.Windows.Controls.Primitives.DragCompletedEventHandler((s, e) => pcmEdits.Flush()), true);
+                slider.AddHandler(Mouse.PreviewMouseUpEvent, new MouseButtonEventHandler((s, e) => pcmEdits.Flush()), true);
+            }
+            if (sessionManager != null) { sessionManager.PcmControlChanged += OnPcmControlChanged; sessionManager.StateChanged += OnPcmControlChanged; }
+            UpdatePcmControlStatus();
             WindowCorners.ApplyRounded(this);
             viewInitialized = true;
 
@@ -469,8 +480,10 @@ namespace ApexSenseBridgeTray
             // Only the capabilities of the identified controller are shown (and therefore navigable).
             var items = new FrameworkElement[]
             {
-                TileSettingSyncLightbar, RowLightbarBrightness, TileSettingZoneEmulation, RowTriggerStrength, RowVibrationStrength,
-                RowGyroStrength, RowGyroYawStrength, RowVibrationThreshold, RowGripVibrations
+                TileSettingSyncLightbar, RowTriggerStrength, RowVibrationStrength,
+                RowGyroStrength, RowGyroYawStrength, RowVibrationThreshold, RowGripVibrations,
+                CmbGlobalApex6PcmMode, SliderGlobalApex6PcmLinear,
+                SliderGlobalApex6PcmCompanding, BtnSettingsPcmMeasure
             }.Where(item => item != null);
             return (navigableOnly ? items.Where(IsNavigable) : items).ToArray();
         }
@@ -492,6 +505,8 @@ namespace ApexSenseBridgeTray
             if (row == RowGyroStrength) return SliderApex4GyroStrength;
             if (row == RowGyroYawStrength) return SliderApex4GyroYawStrength;
             if (row == RowVibrationThreshold) return SliderVibrationThreshold;
+            if (row == SliderGlobalApex6PcmLinear) return SliderGlobalApex6PcmLinear;
+            if (row == SliderGlobalApex6PcmCompanding) return SliderGlobalApex6PcmCompanding;
             return null;
         }
 
@@ -903,7 +918,7 @@ namespace ApexSenseBridgeTray
             Key key = e.Key == Key.System ? e.SystemKey : e.Key;
             bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
             bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
-            bool inTextBox = Keyboard.FocusedElement is TextBox;
+            var focusedTextBox = Keyboard.FocusedElement as TextBox;
 
             if (key == Key.Tab && ctrl)
             {
@@ -925,9 +940,15 @@ namespace ApexSenseBridgeTray
                 e.Handled = true;
                 return;
             }
-            if (inTextBox)
+            if (focusedTextBox != null)
             {
-                // Typing stays in the search box; Down or Enter hand control back to the list.
+                // Only the two search fields use Enter/Down to navigate the game
+                // list. Every other TextBox (notably PCM percentage inputs)
+                // must receive Enter itself so its KeyDown handler can commit
+                // the typed number and synchronize its slider and live engine.
+                // Previously PreviewKeyDown consumed Enter for *all* TextBoxes.
+                if (focusedTextBox != TxtSearch && focusedTextBox != TxtSearchLearned)
+                    return;
                 if (key != Key.Down && key != Key.Enter) return;
                 Focus();
                 bool revealed = RevealKeyboardFocus();
@@ -1041,6 +1062,7 @@ namespace ApexSenseBridgeTray
                 else if (item == TileSettingZoneEmulation) OnSettingZoneEmulationToggled(null, null);
                 else if (item == TileSettingLanguage) OpenLanguagePicker();
                 else if (item == RowGripVibrations) ToggleGripVibrations();
+                else if (item == CmbGlobalApex6PcmMode) CmbGlobalApex6PcmMode.IsDropDownOpen = true;
                 else if (item is Button button) button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 // Keep the focus ring on the same element after a toggle changed which rows are visible.
                 if (item != null)
@@ -1546,13 +1568,14 @@ namespace ApexSenseBridgeTray
             var title = launchGame != null ? launchGame.Title : System.IO.Path.GetFileNameWithoutExtension(picker.FileName);
             var profile = launchGame != null ? launchGame.Profile : "standard";
             var slot = launchGame != null ? settings.GetApexProfileSlot(launchGame.Normalized) : 0;
+            var normalizedKey = launchGame != null ? launchGame.Normalized : null;
             settings.ForcedProfile = "standard";
             preparedLaunchPending = true;
             string error = null;
             bool started = false;
             try
             {
-                started = await Task.Run(() => sessionManager.StartSession(title, profile, settings, slot, out error));
+                started = await Task.Run(() => sessionManager.StartSession(title, profile, settings, slot, normalizedKey, out error));
             }
             finally { preparedLaunchPending = false; }
             if (!started)
@@ -1841,6 +1864,7 @@ namespace ApexSenseBridgeTray
         private void UpdateDetailPane()
         {
             var game = SelectedGame;
+            // UI selection is not a change to the running game session: keep measurement active.
             if (game == null)
             {
                 if (TxtDetailEmpty != null) TxtDetailEmpty.Visibility = Visibility.Visible;
@@ -1895,8 +1919,7 @@ namespace ApexSenseBridgeTray
                         ? "Loc_BtnManualFixBlock"
                         : "Loc_BtnManualFixAllow");
             }
-            UpdateManualFixGuide(game);
-            UpdateTouchpadGuide(game);
+            UpdateApex6PcmDetailPane();
         }
 
         private void UpdateExecutableChoices()
@@ -2797,6 +2820,11 @@ namespace ApexSenseBridgeTray
             var calibration = settings.GetControllerCalibration(lastControllerStatus);
             bool canEdit = calibration != null;
             var displayed = calibration ?? new ControllerCalibration();
+            // While an engine session owns the HID handle, passive controller
+            // detection can be unavailable; the verified session still permits
+            // access to its APEX 6 PCM settings and live monitor.
+            bool apex6Session = sessionManager != null &&
+                string.Equals(sessionManager.ActiveController, "apex6", StringComparison.OrdinalIgnoreCase);
             updatingEffectSettings = true;
             SliderTriggerStrength.Value = displayed.TriggerStrengthPercent;
             SliderVibrationStrength.Maximum = lastControllerStatus == "apex4" || lastControllerStatus == "apex5" ? 200 : 100;
@@ -2820,13 +2848,20 @@ namespace ApexSenseBridgeTray
             TileSettingSyncLightbar.IsEnabled = lastControllerStatus == "apex5";
             // Show only what the identified model supports; keep the locked message otherwise.
             TileSettingSyncLightbar.Visibility = TileSettingSyncLightbar.IsEnabled ? Visibility.Visible : Visibility.Collapsed;
-            SliderLightbarBrightness.IsEnabled = TileSettingSyncLightbar.IsEnabled;
-            RowLightbarBrightness.Visibility = TileSettingSyncLightbar.Visibility;
-            TileSettingZoneEmulation.IsEnabled = lastControllerStatus == "apex5";
-            TileSettingZoneEmulation.Visibility = TileSettingZoneEmulation.IsEnabled ? Visibility.Visible : Visibility.Collapsed;
-            PnlControllerEffects.Visibility = canEdit ? Visibility.Visible : Visibility.Collapsed;
+            PnlControllerEffects.Visibility = canEdit || apex6Session ? Visibility.Visible : Visibility.Collapsed;
             PnlApex4GyroSettings.Visibility = lastControllerStatus == "apex4" ? Visibility.Visible : Visibility.Collapsed;
             PnlHapticThresholdSettings.Visibility = SliderVibrationThreshold.IsEnabled ? Visibility.Visible : Visibility.Collapsed;
+            if (PnlApex6PcmGlobalSettings != null)
+            {
+                PnlApex6PcmGlobalSettings.Visibility = lastControllerStatus == "apex6" || apex6Session
+                    ? Visibility.Visible : Visibility.Collapsed;
+                // Global defaults are separate from explicit per-game overrides.
+                if (lastControllerStatus == "apex6" || apex6Session)
+                {
+                    UpdateGlobalApex6PcmUi();
+                    UpdateSettingsPcmMonitor();
+                }
+            }
             TxtControllerCalibrationStatus.Text = canEdit
                 ? string.Format(LocalizationManager.Get("Loc_ControllerCalibrationReady"),
                     lastControllerStatus == "apex4" ? "Apex 4" : lastControllerStatus == "apex5" ? "Apex 5" : "Apex 6 Pro")
@@ -3090,6 +3125,8 @@ namespace ApexSenseBridgeTray
             win.ShowDialog();
         }
 
+
+
         #region First-run support callout
 
         private System.Windows.Threading.DispatcherTimer supportHintTimer;
@@ -3322,7 +3359,11 @@ namespace ApexSenseBridgeTray
 
         protected override void OnClosed(EventArgs e)
         {
+            pcmEdits?.Flush();
+            pcmEditTimer.Stop();
+            if (sessionManager != null) { sessionManager.PcmControlChanged -= OnPcmControlChanged; sessionManager.StateChanged -= OnPcmControlChanged; }
             statusTimer.Stop();
+            DisconnectPcmMeasurement();
             controllerDetection?.Dispose();
             gamepadNav?.Dispose();
             base.OnClosed(e);

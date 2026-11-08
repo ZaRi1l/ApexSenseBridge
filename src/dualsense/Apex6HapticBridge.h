@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/TriggerEffect.h"
+#include "extensions/Apex6PcmExtension.h"
 #include "dualsense/Apex6TriggerEffect.h"
 #include "dualsense/DualSenseFeedback.h"
 #include "flydigi/Apex5Device.h"
@@ -97,6 +98,16 @@ struct Apex6HapticBridgeStats {
     std::uint64_t waveformTotalAgeUs = 0;
     std::uint64_t waveformActiveRendered = 0;
     unsigned pcmGainPercent = 100;
+    Apex6PcmMode pcmMode = Apex6PcmMode::Original;
+    unsigned pcmReferencePercent = 0;
+    unsigned pcmReferencePeakAbs16 = 0;
+    unsigned pcmTargetPercent = 90;
+    double pcmRequestedGainRatio = 1.0;
+    double pcmEffectiveGainRatio = 1.0;
+    bool pcmGainLimited = false;
+    std::string pcmMeasurementStatus = "valid";
+    std::uint64_t pcmOutputClippedSamples = 0;
+    std::uint64_t pcmProcessedSamples = 0;
     std::uint64_t pcmOutputLeftPeak = 0;
     std::uint64_t pcmOutputRightPeak = 0;
     std::uint64_t gripEnvelopeFrames = 0;
@@ -128,8 +139,14 @@ public:
                                haptics::HapticConfig config = {},
                                bool routeGrips = true, unsigned triggerStrengthPercent = 100,
                                unsigned vibrationStrengthPercent = 100,
-                               unsigned pcmGainPercent = 100,
-                               std::optional<unsigned> pcmLinearGainPercent = std::nullopt);
+                               Apex6PcmConfig pcmConfig = {},
+                               std::string_view sessionToken = {},
+                               std::string_view gameKey = {});
+    explicit Apex6HapticBridge(flydigi::Apex5Device& device,
+                               haptics::HapticConfig config,
+                               bool routeGrips, unsigned triggerStrengthPercent,
+                               unsigned vibrationStrengthPercent,
+                               unsigned pcmGainPercent);
     ~Apex6HapticBridge();
 
     Apex6HapticBridge(const Apex6HapticBridge&) = delete;
@@ -141,6 +158,10 @@ public:
     void updateTriggerPositions(std::uint8_t left, std::uint8_t right) noexcept;
     void setDiagnosticTrigger(const ForceTriggerCommand& command) noexcept;
     void setDiagnosticGrips(std::uint8_t left, std::uint8_t right) noexcept;
+    void setPcmAudioFormat(unsigned channels, bool verifiedQuadraphonic) noexcept {
+        pcmAudioChannels_.store(channels, std::memory_order_relaxed);
+        pcmAudioVerified_.store(verifiedQuadraphonic, std::memory_order_relaxed);
+    }
 
     [[nodiscard]] bool failed() const noexcept;
     [[nodiscard]] std::string error() const;
@@ -153,6 +174,9 @@ private:
         std::uint32_t sequence = 0;
         std::array<std::int16_t, 8> left{};
         std::array<std::int16_t, 8> right{};
+        std::uint16_t rawHapticLeftPeak = 0;
+        std::uint16_t rawHapticRightPeak = 0;
+        bool hasRawMeasurements = false;
         Clock::time_point receivedAt{};
     };
 
@@ -173,8 +197,9 @@ private:
     bool routeGrips_ = true;
     unsigned triggerStrengthPercent_ = 100;
     unsigned vibrationStrengthPercent_ = 100;
-    unsigned pcmGainPercent_ = 100;
-    std::optional<unsigned> pcmLinearGainPercent_;
+    extensions::Apex6PcmExtension pcmExtension_;
+    std::atomic_uint pcmAudioChannels_{0};
+    std::atomic_bool pcmAudioVerified_{false};
     std::uint64_t triggerSampleOffset_ = 0;
     mutable std::mutex stateMutex_;
     std::condition_variable stopSignal_;
@@ -262,6 +287,8 @@ private:
     std::atomic_uint64_t waveformMaximumAgeUs_{0};
     std::atomic_uint64_t waveformTotalAgeUs_{0};
     std::atomic_uint64_t waveformActiveRendered_{0};
+    std::atomic_uint64_t pcmOutputClippedSamples_{0};
+    std::atomic_uint64_t pcmProcessedSamples_{0};
     std::atomic_uint64_t pcmOutputLeftPeak_{0};
     std::atomic_uint64_t pcmOutputRightPeak_{0};
     std::atomic_uint64_t gripEnvelopeFrames_{0};

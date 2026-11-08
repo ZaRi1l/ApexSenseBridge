@@ -55,6 +55,10 @@ internal static class TrayLearningTests
             TestManualFixGamesPreservePhysicalInput();
             TestManualFixGuideEntries();
             TestPerGameApexProfileSettings();
+            TestApex6PcmSettings();
+            TestPcmControl();
+            Assert(typeof(EngineSessionManager).Assembly.GetType("ApexSenseBridgeTray.Services.Apex6PcmControlClient") != null,
+                "Live PCM client must be available for acknowledged engine updates");
             TestOnboardProfileSelectorLock();
             TestManualBridgeModeIsNotPersisted();
             TestSharedBridgeArguments();
@@ -102,6 +106,88 @@ internal static class TrayLearningTests
         {
             try { Directory.Delete(testRoot, true); } catch { }
         }
+    }
+
+    private static void TestPcmControl()
+    {
+        Assert(typeof(EngineSessionManager).Assembly.GetType("ApexSenseBridgeTray.Services.PcmEditDebouncer") != null, "PCM edits need a flushable debounce coordinator");
+        int commits = 0;
+        var debounce = new PcmEditDebouncer(() => commits++);
+        for (int i = 0; i < 20; i++) { debounce.Schedule(); debounce.Tick(); }
+        Assert(commits == 0, "rapid edits must not write disk or IPC immediately");
+        Thread.Sleep(180); debounce.Tick();
+        Assert(commits == 1, "quiet period coalesces edits to one commit");
+        debounce.Schedule(); debounce.Flush(); debounce.Flush();
+        Assert(commits == 2, "drag or close flush writes final edit exactly once");
+        var settings = new TraySettings();
+        var request = Apex6PcmControlClient.CreateRequest(" GAME ", settings.ResolveApex6PcmPolicy("game"));
+        Assert(BitConverter.ToUInt32(request, 276) == 0, "unconfigured game must request original");
+        Assert(request.Length == 312 && BitConverter.ToUInt32(request, 4) == 2 && BitConverter.ToUInt32(request, 308) == 0,
+            "PCM control v2 must apply global strength by default.");
+        settings.SetApex6PcmGameSettings("independent-strength", new Apex6PcmGameSettings {
+            UseGlobal = true, ApplyGlobalVibrationStrength = false });
+        var strengthRequest = Apex6PcmControlClient.CreateRequest("independent-strength",
+            settings.ResolveApex6PcmPolicy("independent-strength"));
+        Assert(BitConverter.ToUInt32(strengthRequest, 308) == 1 && BitConverter.ToUInt32(strengthRequest, 276) == 0,
+            "Per-game PCM strength bypass must not change inherited PCM mode.");
+        Assert(BitConverter.ToUInt32(Apex6PcmControlClient.CreateRequest("other", settings.ResolveApex6PcmPolicy("other")), 308) == 0,
+            "A strength bypass on one game must not affect others.");
+        Assert(Encoding.UTF8.GetString(request, 20, 4) == "game", "identity must be normalized");
+        var linearRequest = Apex6PcmControlClient.CreateRequest("게임 키", new Apex6PcmGameSettings { Mode = "linear" });
+        Assert(BitConverter.ToUInt32(linearRequest, 276) == 2 && BitConverter.ToUInt32(linearRequest, 300) == 100, "wire enum and legacy bounds match engine");
+        var builder = typeof(EngineSessionManager).GetMethod("BuildArguments", BindingFlags.Static | BindingFlags.NonPublic);
+        string unicodeArgs = (string)builder.Invoke(null, new object[] { "standard", settings, 0, "게임 키" });
+        Assert(unicodeArgs.Contains("--apex6-pcm-game-key-hex " + BitConverter.ToString(Encoding.UTF8.GetBytes("게임 키")).Replace("-", "").ToLowerInvariant()), "startup identity uses UTF8 hex rather than Windows ACP");
+        var reference = new Apex6PcmGameSettings { UseGlobal = true };
+        Assert(reference.TrySetManualReference("1234", "abs16"), "manual exact reference accepted");
+        settings.SetApex6PcmGameSettings("active", reference);
+        settings.GetApex6PcmGlobal().Mode = "linear";
+        settings.GetApex6PcmGlobal().LinearGainPercent = 1000;
+        var active = Apex6PcmControlClient.CreateRequest("active", settings.ResolveApex6PcmPolicy("active"));
+        Assert(BitConverter.ToUInt32(active, 276) == 2 && BitConverter.ToUInt32(active, 280) == 1000,
+            "inherited Linear boost must reach live IPC at full 1000 percent");
+        settings.GetApex6PcmGlobal().Mode = "original";
+        Assert(BitConverter.ToUInt32(Apex6PcmControlClient.CreateRequest("active", settings.ResolveApex6PcmPolicy("active")), 276) == 0, "global disable sends explicit original");
+        settings.SetApex6PcmGameSettings("other", new Apex6PcmGameSettings { UseGlobal = false, Mode = "linear", LinearGainPercent = 350 });
+        Assert(BitConverter.ToUInt32(Apex6PcmControlClient.CreateRequest("active", settings.ResolveApex6PcmPolicy("active")), 276) == 0, "editing a different selected game cannot select its policy for active engine");
+        bool rejected = false;
+        try { Apex6PcmControlClient.NormalizeGameKey(new string('가', 86)); } catch (ArgumentException) { rejected = true; }
+        Assert(rejected, "UTF8 byte length must reject oversized identity without truncation");
+        foreach (uint status in new uint[] { 1, 3, 5 })
+        {
+            string token = Guid.NewGuid().ToString("N");
+            string name = @"Local\ApexSenseBridge.Session." + token + ".Apex6PcmControl";
+            using (var map = System.IO.MemoryMappedFiles.MemoryMappedFile.CreateNew(name, 312))
+            using (var view = map.CreateViewAccessor())
+            using (var mutex = new Mutex(false, name + ".Mutex"))
+            {
+                view.Write(0, 0x43365041u); view.Write(4, 2u); view.Write(8, 42u); view.Write(12, 42u);
+                view.WriteArray(20, Encoding.UTF8.GetBytes("game"), 0, 4);
+                var task = new Apex6PcmControlClient().ApplyAsync(token, request, 600);
+                Assert(SpinWait.SpinUntil(() => view.ReadUInt32(8) == 43, 400), "client must advance existing revision");
+                Assert(!task.IsCompleted, "publication is not application");
+                Thread.Sleep(30);
+                mutex.WaitOne();
+                try { view.Write(16, status); if (status == 1) view.Write(12, 43u); } finally { mutex.ReleaseMutex(); }
+                Assert(task.GetAwaiter().GetResult() == (status == 1 ? "Applied" : "Error: engine status " + status), "only Applied ACK counts as success");
+                view.Write(4, 1u);
+                Assert(new Apex6PcmControlClient().ApplyAsync(token, request).GetAwaiter().GetResult().Contains("InvalidProtocol"), "version mismatch is explicit");
+                view.Write(4, 2u); view.Write(12, 0u);
+                Assert(new Apex6PcmControlClient().ApplyAsync(token, request, 80).GetAwaiter().GetResult().StartsWith("Disconnected"), "stale ACK must time out");
+                view.Write(16, 4u);
+                uint next = view.ReadUInt32(8) + 1;
+                var recovered = new Apex6PcmControlClient().ApplyAsync(token, request, 600);
+                Assert(SpinWait.SpinUntil(() => view.ReadUInt32(8) == next, 400), "new request follows rejected request");
+                mutex.WaitOne();
+                try { view.Write(16, 1u); view.Write(12, next); } finally { mutex.ReleaseMutex(); }
+                Assert(recovered.GetAwaiter().GetResult() == "Applied", "previous rejection cannot poison new request");
+                view.Write(16, 6u);
+                Assert(new Apex6PcmControlClient().ApplyAsync(token, request).GetAwaiter().GetResult() == "Disconnected", "offline is distinct from engine rejection");
+                view.Write(16, 0u); view.Write(20, (byte)'x');
+                Assert(new Apex6PcmControlClient().ApplyAsync(token, request).GetAwaiter().GetResult() == "Error: WrongGame", "foreign mapping cannot be overwritten");
+            }
+        }
+        Assert(new Apex6PcmControlClient().ApplyAsync(Guid.NewGuid().ToString("N"), request).GetAwaiter().GetResult() == "Disconnected", "missing mapping is disconnected");
     }
 
     private static void TestReleaseAssetPolicy()
@@ -891,6 +977,130 @@ internal static class TrayLearningTests
                "bridge-triggers --touchpad-profile none --trigger-strength 100 --vibration-strength 100 " +
                "--apex4-gyro-strength 100 --apex4-gyro-yaw-strength 100",
             "The shared bridge argument contract did not preserve minimal defaults.");
+        Assert(BridgeArguments.Build("none", true, 12, false, 0, 100, 100, 100, 100, "--apex6-pcm-mode linear --apex6-pcm-linear-gain-percent 1000").Contains(
+            "--apex6-pcm-linear-gain-percent 1000"),
+            "The shared bridge arguments dropped APEX 6 PCM arguments.");
+    }
+
+    private static void TestApex6PcmSettings()
+    {
+        var settings = new TraySettings();
+        Assert(settings.GetApex6PcmGlobal().Mode == "original", "Default global mode changed.");
+        Assert(settings.BuildApex6PcmArguments("zenless-zone-zero") == string.Empty,
+            "Unconfigured games must preserve original output.");
+
+        settings.GetApex6PcmGlobal().Mode = "linear";
+        settings.GetApex6PcmGlobal().LinearGainPercent = 150;
+        Assert(settings.BuildApex6PcmArguments("pragmata") ==
+            " --apex6-pcm-mode linear --apex6-pcm-linear-gain-percent 150",
+            "Global Linear policy was lost.");
+
+        var zzz = new Apex6PcmGameSettings
+        {
+            UseGlobal = false,
+            Mode = "linear",
+            LinearGainPercent = 1000,
+            MeasuredReferencePeakAbs16 = 10028
+        };
+        settings.SetApex6PcmGameSettings("zenless-zone-zero", zzz);
+        Assert(settings.BuildApex6PcmArguments("zenless-zone-zero") ==
+            " --apex6-pcm-mode linear --apex6-pcm-linear-gain-percent 1000",
+            "Per-game 1000 percent Linear override was not persisted.");
+        Assert(settings.BuildApex6PcmArguments("Zenless-Zone-Zero") ==
+            settings.BuildApex6PcmArguments("zenless-zone-zero"),
+            "Game identity comparison must be case-insensitive.");
+        Assert(settings.BuildApex6PcmArguments("pragmata") ==
+            " --apex6-pcm-mode linear --apex6-pcm-linear-gain-percent 150",
+            "One game's boost leaked into another game.");
+
+        // Old JSON must preserve the former global-strength behavior.
+        var oldSettingsJson = @"{""Apex6PcmGames"":{""legacy-game"":{""Mode"":""linear"",""LinearGainPercent"":400}}}";
+        var fromOldJson = new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<TraySettings>(oldSettingsJson);
+        Assert(fromOldJson.ResolveApex6PcmPolicy("legacy-game").ApplyGlobalVibrationStrength,
+            "Older profiles without new fields must use global vibration strength.");
+        var bypassGame = new Apex6PcmGameSettings {
+            UseGlobal = false, Mode = "linear", LinearGainPercent = 1000,
+            ApplyGlobalVibrationStrength = false };
+        settings.SetApex6PcmGameSettings("exclusive-pcm", bypassGame);
+        Assert(settings.BuildApex6PcmArguments("exclusive-pcm").Contains("--apex6-pcm-ignore-vibration-strength"),
+            "Per-game bypass must reach engine startup arguments.");
+        Assert(!settings.BuildApex6PcmArguments("zenless-zone-zero").Contains("--apex6-pcm-ignore-vibration-strength"),
+            "Per-game bypass must not leak into another game's startup.");
+        var serializer = new System.Web.Script.Serialization.JavaScriptSerializer();
+        var restored = serializer.Deserialize<TraySettings>(serializer.Serialize(settings));
+        Assert(!restored.ResolveApex6PcmPolicy("exclusive-pcm").ApplyGlobalVibrationStrength,
+            "Per-game bypass must survive JSON roundtrip.");
+        Assert(restored.GetApex6PcmGameSettings("ZENLESS-ZONE-ZERO").LinearGainPercent == 1000,
+            "Game gain was lost during settings JSON roundtrip.");
+        Assert(restored.GetApex6PcmGameSettings("zenless-zone-zero").MeasuredReferencePeakAbs16 == 10028,
+            "Measured data changed during settings JSON roundtrip.");
+
+        // Migrate old Normalize configuration into independently editable Linear.
+        var legacy = new Apex6PcmGameSettings { UseGlobal = true, Mode = "normalize", LinearGainPercent = 400 };
+        restored.SetApex6PcmGameSettings("old-profile", legacy);
+        Assert(restored.BuildApex6PcmArguments("old-profile") ==
+            " --apex6-pcm-mode linear --apex6-pcm-linear-gain-percent 400",
+            "Legacy saved manual gain was not recovered.");
+
+        restored.GetApex6PcmGlobal().Mode = "original";
+        restored.SetApex6PcmGameSettings("zenless-zone-zero", null);
+        Assert(restored.BuildApex6PcmArguments("zenless-zone-zero") == string.Empty,
+            "Reset did not return to original output.");
+
+        restored.GetApex6PcmGlobal().Mode = "companding";
+        restored.GetApex6PcmGlobal().CompandingGainPercent = 175;
+        Assert(restored.BuildApex6PcmArguments("pragmata").Contains("--apex6-pcm-companding-gain-percent 175"),
+            "The original Companding feature must remain compatible.");
+
+        TestApex6PcmManualReferenceAndPolicy();
+        Assert(serializer.Deserialize<TraySettings>(@"{""AutoDetectGames"":true}").GetApex6PcmGlobal().Mode == "original",
+            "Pre-PCM settings migration failed.");
+    }
+
+    private static void TestApex6PcmManualReferenceAndPolicy()
+    {
+        int peak;
+        foreach (int value in new[] { 0, 1, 100, 32768 })
+            Assert(Apex6PcmGameSettings.TryParseManualReference(
+                value.ToString(CultureInfo.InvariantCulture), "abs16", out peak) && peak == value,
+                "Measurement metadata must preserve exact 16-bit peaks.");
+
+        Assert(Apex6PcmGameSettings.TryParseManualReference("1", "%", out peak) && peak == 328,
+            "Measured percent conversion changed.");
+        foreach (string value in new[] { "-1", "NaN", "Infinity", "-Infinity", "1e999", "" })
+            Assert(!Apex6PcmGameSettings.TryParseManualReference(value, "%", out peak),
+                "Invalid measurement metadata was accepted.");
+
+        var settings = new TraySettings();
+        var game = new Apex6PcmGameSettings { UseGlobal = false, Mode = "linear", LinearGainPercent = 1000 };
+        settings.SetApex6PcmGameSettings("manual", game);
+        Assert(settings.ResolveApex6PcmPolicy("manual").GetEffectiveGainRatio() == 10.0,
+            "Saved Linear boost did not produce 10x scaling.");
+        Assert(game.GetRecommendedLinearGainPercent() == 0,
+            "Unmeasured reference must not propose an automatic gain.");
+        Assert(game.TrySetManualReference("13736", "abs16"),
+            "Observed reference peak could not be stored.");
+        Assert(game.GetRecommendedLinearGainPercent() == 239,
+            "Observed 41.9 percent reference should suggest 239 percent.");
+        Assert(game.LinearGainPercent == 1000,
+            "Displaying a suggested gain must not change the user's saved gain.");
+        Assert(game.TrySetManualReference("2000", "abs16") &&
+            game.GetRecommendedLinearGainPercent() > 1000,
+            "Unreachable 100 percent gain should remain visibly above the slider limit.");
+        Assert(game.TrySetManualReference("32768", "abs16") &&
+            game.GetRecommendedLinearGainPercent() == 100,
+            "Full-scale input should suggest 100 percent.");
+        Assert(game.TrySetManualReference("10028", "abs16"),
+            "Raw peak metadata could not be stored.");
+        Assert(settings.ResolveApex6PcmPolicy("manual").GetEffectiveGainRatio() == 10.0,
+            "Measuring a peak must never recalculate the user's Linear gain.");
+        var serializer = new System.Web.Script.Serialization.JavaScriptSerializer();
+        var restored = serializer.Deserialize<TraySettings>(serializer.Serialize(settings));
+        Assert(restored.GetApex6PcmGameSettings("manual").MeasuredReferencePeakAbs16 == 10028 &&
+            restored.GetApex6PcmGameSettings("manual").LinearGainPercent == 1000,
+            "Measurement and gain settings did not survive serialization.");
+        Assert(restored.BuildApex6PcmArguments("other") == string.Empty,
+            "Game-specific boost leaked into an unconfigured game.");
     }
 
     private static void TestGameExecutableSettings()
@@ -1074,7 +1284,7 @@ internal static class TrayLearningTests
             "Model-specific amplification did not survive persistence.");
         arguments = settings.BuildControllerCalibrationArguments();
         var builder = typeof(EngineSessionManager).GetMethod("BuildArguments", BindingFlags.Static | BindingFlags.NonPublic);
-        var sessionArguments = (string)builder.Invoke(null, new object[] { "standard", settings, 3, "Alpha" });
+        var sessionArguments = (string)builder.Invoke(null, new object[] { "standard", settings, 3, null });
         Assert(sessionArguments.EndsWith(arguments, StringComparison.Ordinal) &&
             !sessionArguments.Contains("--sync-lightbar") && !sessionArguments.Contains("--haptic-threshold"),
             "Session launch used legacy global tuning instead of verified-model selection.");
