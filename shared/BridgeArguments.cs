@@ -16,7 +16,9 @@ namespace ApexSenseBridge.Common
             int vibrationStrengthPercent = 100,
             int apex4GyroStrengthPercent = 100,
             int apex4GyroYawStrengthPercent = 100,
-            string apex6PcmArguments = null)
+            string apex6PcmArguments = null,
+            bool zoneEmulation = true,
+            int lightbarBrightnessPercent = 100)
         {
             var arguments = new List<string>
             {
@@ -70,6 +72,27 @@ namespace ApexSenseBridge.Common
                 result += apex6PcmArguments.StartsWith(" ") ? apex6PcmArguments : " " + apex6PcmArguments;
             }
             return result;
+        }
+
+        // Keep the Nov 6 caller signature (zone and brightness) while
+        // allowing the Extended PCM options to be appended independently.
+        public static string Build(
+            string touchpadProfile,
+            bool enableRumble,
+            int hapticThresholdPercent,
+            bool syncLightbar,
+            int apexProfileSlot,
+            int triggerStrengthPercent,
+            int vibrationStrengthPercent,
+            int apex4GyroStrengthPercent,
+            int apex4GyroYawStrengthPercent,
+            bool zoneEmulation,
+            int lightbarBrightnessPercent)
+        {
+            return Build(touchpadProfile, enableRumble, hapticThresholdPercent,
+                syncLightbar, apexProfileSlot, triggerStrengthPercent,
+                vibrationStrengthPercent, apex4GyroStrengthPercent,
+                apex4GyroYawStrengthPercent, null, zoneEmulation, lightbarBrightnessPercent);
         }
 
         private static string NormalizeTouchpadProfile(string profile)
