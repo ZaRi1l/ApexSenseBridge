@@ -1,0 +1,119 @@
+name: Validate November 6 Extended integration candidate
+
+on:
+  push:
+    branches:
+      - work/extended-nov6-integration-20261108
+    paths:
+      - .github/workflows/validate-extended-nov6-integration.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integrate-build-test:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - name: Checkout November 6 source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Integrate full Extended UI from October 30 feature branch
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git fetch origin feature/upstream-ready-pcm-ui
+          if ($LASTEXITCODE -ne 0) { throw 'Could not fetch full UI branch' }
+          git config user.name 'GitHub Actions Integration'
+          git config user.email 'actions@users.noreply.github.com'
+          git merge --no-commit --no-ff -X ours origin/feature/upstream-ready-pcm-ui
+          $mergeExit = $LASTEXITCODE
+          $conflicts = @(git diff --name-only --diff-filter=U)
+          Write-Host "Merge exit code: $mergeExit"
+          Write-Host "Conflicted paths: $($conflicts.Count)"
+          foreach ($f in $conflicts) { Write-Host "CONFLICT: $f" }
+          if ($mergeExit -ne 0 -or $conflicts.Count -gt 0) { throw 'Merge requires manual conflict resolution' }
+          git status --short
+          $expected = @(
+            'src/extensions/Apex6PcmExtension.h',
+            'src/platform/Apex6PcmLiveMetrics.h',
+            'src/platform/Apex6PcmControl.h',
+            'ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs',
+            'ApexSenseBridgeTray/Services/Apex6PcmControlClient.cs'
+          )
+          foreach ($f in $expected) {
+            if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { throw "Missing required Extended component: $f" }
+          }
+          if (-not (Select-String -Path 'ApexSenseBridgeTray/GameListWindow.xaml' -Pattern 'Pcm|PCM' -Quiet)) {
+            throw 'Missing Extended PCM measurement UI'
+          }
+          if (-not (Select-String -Path 'src/cli/BridgeOptions.cpp' -Pattern 'apex6-linear-gain' -Quiet)) {
+            throw 'Lost November 6 linear CLI option'
+          }
+          git commit -m "test: candidate merge Nov 6 core with full Extended measurement UI"
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate merge commit failed' }
+          git log -1 --format="%H %s"
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v3
+
+      - name: Setup Go for VIIPER
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.5'
+          cache: false
+
+      - name: Build VIIPER backend and fallback
+        shell: powershell
+        run: |
+          .\scripts\build-viiper-windows.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\scripts\build-libviiper-windows.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build native engine and tests
+        shell: powershell
+        run: |
+          .\scripts\build-windows.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build Extended WPF UI and learning tests
+        shell: powershell
+        run: |
+          .\scripts\build-tray-app.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run regressions
+        shell: powershell
+        run: |
+          ctest --test-dir .\build-win -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (Test-Path 'scripts/test-tray-controller-settings.ps1') {
+            .\scripts\test-tray-controller-settings.ps1
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Check original Extended UI source contracts
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m pytest -q tests/test_pcm_settings_monitor_contract.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Package candidate only after tests pass
+        shell: powershell
+        run: |
+          .\scripts\build-portable.ps1 -SkipBuild
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload candidate for further inspection only
+        uses: actions/upload-artifact@v4
+        with:
+          name: apex6-extended-nov6-candidate-not-yet-released
+          path: dist/ApexSenseBridge-Portable.zip
+          if-no-files-found: error
+          retention-days: 7
