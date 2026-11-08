@@ -269,6 +269,7 @@ bool parseBridgeOptions(int argc, char** argv, BridgeCommandOptions& options,
                 if (nov6Alias) {
                     options.apex6PcmConfig.mode = asb::dualsense::Apex6PcmMode::Linear;
                     options.apex6LinearGainExplicit = true;
+                    options.apex6LinearGainPercent = static_cast<unsigned>(parsed);
                 }
             } catch (...) {
                 error = optionName + " requires an integer percentage from 0 to 1000.";
