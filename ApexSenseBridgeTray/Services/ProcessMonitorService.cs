@@ -1192,24 +1192,7 @@ namespace ApexSenseBridgeTray.Services
                 long expectedCreationTicks;
                 lock (sessionStateLock)
                 {
-                    using (var process = Process.GetProcessById((int)processId))
-                    {
-                        hasExited = process.HasExited;
-                    }
-                }
-                catch (ArgumentException)
-                {
-                    hasExited = true;
-                    reason = "Process exited";
-                }
-                catch (Exception ex)
-                {
-                    // Access denied or a transient process query failure is not evidence
-                    // that the game exited. Preserve the active session; WMI stop or a
-                    // later confirmed exit will detach the PID.
-                    LogEvent("[PruneExitedTrackedProcesses] Process " + processId +
-                             " could not be queried; keeping bridge active: " + ex.Message);
-                    hasExited = false;
+                    trackedCreationTicks.TryGetValue(processId, out expectedCreationTicks);
                 }
 
                 long creationTicks;
