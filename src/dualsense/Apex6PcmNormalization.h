@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dualsense/Apex6PcmGain.h"
+#include "dualsense/Apex6PcmLinear.h"
 
 #include <algorithm>
 #include <cmath>
@@ -75,21 +76,18 @@ public:
         }
 
         case Apex6PcmMode::Linear: {
-            if (!state_.valid || state_.effectiveGainRatio == 1.0) {
-                return static_cast<std::int8_t>(static_cast<std::int32_t>(sample) * 127 / fullScale);
-            }
-            const double originalOut = static_cast<double>(sample) * 127.0 / static_cast<double>(fullScale);
-            const double scaledOut = originalOut * state_.effectiveGainRatio;
-            const auto rounded = static_cast<std::int64_t>(std::lround(scaledOut));
-            if (rounded > 127) {
-                clipped = true;
-                return 127;
-            }
-            if (rounded < -127) {
-                clipped = true;
-                return -127;
-            }
-            return static_cast<std::int8_t>(rounded);
+            // Reuse the Nov 6 upstream-dev integer scaler so native CLI and
+            // Extended WPF per-game gain use the exact same PCM transform.
+            const unsigned gain = std::clamp(config_.linearGainPercent, 0U, 1000U);
+            if (!state_.valid) return scaleApex6PcmLinear(sample, 100);
+            const auto result = scaleApex6PcmLinear(sample, gain);
+            // The digital output saturates at +/-127. Count actual saturation
+            // without changing the rounding or the 100% upstream baseline.
+            const std::int64_t magnitude = sample >= 0 ? sample : -std::int64_t{sample};
+            const std::int64_t denominator = fullScale * 100;
+            const std::int64_t rounded = (magnitude * 127 * gain + denominator / 2) / denominator;
+            clipped = rounded > 127;
+            return result;
         }
         }
         return static_cast<std::int8_t>(static_cast<std::int32_t>(sample) * 127 / fullScale);
