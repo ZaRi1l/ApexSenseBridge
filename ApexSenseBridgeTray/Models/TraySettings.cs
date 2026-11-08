@@ -30,6 +30,30 @@ namespace ApexSenseBridgeTray.Models
         }
     }
 
+    public sealed class GameTuning
+    {
+        public int TriggerStrengthPercent { get; set; }
+        public int VibrationStrengthPercent { get; set; }
+        public int HapticThresholdPercent { get; set; }
+
+        public GameTuning()
+        {
+            TriggerStrengthPercent = 100;
+            VibrationStrengthPercent = 100;
+            HapticThresholdPercent = 12;
+        }
+
+        public GameTuning Clone()
+        {
+            return new GameTuning
+            {
+                TriggerStrengthPercent = Math.Max(0, Math.Min(100, TriggerStrengthPercent)),
+                VibrationStrengthPercent = Math.Max(0, Math.Min(200, VibrationStrengthPercent)),
+                HapticThresholdPercent = Math.Max(0, Math.Min(95, HapticThresholdPercent))
+            };
+        }
+    }
+
     public sealed class Apex6PcmGlobalSettings
     {
         public string Mode { get; set; }
