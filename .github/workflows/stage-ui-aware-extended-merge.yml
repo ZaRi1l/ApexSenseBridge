@@ -1,0 +1,31 @@
+name: Stage November 6 Extended integration preferring UI semantics
+
+on:
+  push:
+    branches:
+      - work/extended-nov6-integration-20261108
+    paths:
+      - .github/workflows/stage-ui-aware-extended-merge.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin feature/upstream-ready-pcm-ui
+          git config user.name 'ApexSenseBridge integration bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git merge --no-ff -X theirs -m "chore: integrate UI extension into Nov 6 core preserving UI semantics" origin/feature/upstream-ready-pcm-ui
+          echo '=== source routing ==='
+          grep -n -E 'pcmExtension_|pcmLinearGainPercent_' src/dualsense/Apex6HapticBridge.cpp | head -n 24 || true
+          echo '=== new branch ==='
+          git push origin HEAD:refs/heads/work/extended-nov6-ui-merged-20261108
