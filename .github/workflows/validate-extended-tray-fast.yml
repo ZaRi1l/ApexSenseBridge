@@ -1,0 +1,28 @@
+name: Fast validate Extended WPF Tray
+
+on:
+  push:
+    branches:
+      - work/extended-nov6-ui-merged-20261108
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extended-nov6-fast-tray
+  cancel-in-progress: true
+
+jobs:
+  tray-only:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v3
+      - name: Build full Extended WPF Tray and its regression executable
+        shell: powershell
+        run: |
+          .\scripts\build-tray-app.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
