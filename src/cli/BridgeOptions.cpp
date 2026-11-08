@@ -466,7 +466,7 @@ std::string_view bridgeCommandUsage() noexcept {
            "[--apex6-pcm-linear-gain-percent 0..1000] "
            "[--apex6-pcm-ignore-vibration-strength] "
            "[--apex6-pcm-companding-gain-percent 100..200] "
-            "[--controller-calibration MODEL:TRIGGER:VIBRATION:THRESHOLD:RUMBLE:RGB:GYRO:YAW] "
+            "[--controller-calibration MODEL:TRIGGER:VIBRATION:THRESHOLD:RUMBLE:RGB:GYRO:YAW[:RGBBRIGHTNESS]] "
            "[--apex4-gyro-strength 25..400] "
            "[--apex4-gyro-yaw-strength 25..400] "
            "[--verify-virtual-input] [--touchpad-profile NAME] "
