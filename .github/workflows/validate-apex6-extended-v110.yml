@@ -1,0 +1,117 @@
+name: Validate APEX 6 Extended plus v1.1.0
+
+on:
+  push:
+    branches:
+      - integration/apex6-2khz-extended-v110
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apex6-extended-v110-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-integration:
+    name: Windows build, regressions, portable candidate
+    runs-on: windows-2022
+    timeout-minutes: 100
+    steps:
+      - name: Checkout complete source and VIIPER dependencies
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check Extended and v1.1.0 integration boundaries
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $required = @(
+            'src/extensions/Apex6PcmExtension.h',
+            'src/platform/Apex6PcmLiveMetrics.h',
+            'ApexSenseBridgeTray/Extensions/GameListWindow.PcmExtension.cs',
+            'ApexSenseBridgeTray/Services/Apex6PcmControlClient.cs',
+            'src/dualsense/Apex6HapticShaping.h',
+            'ApexSenseBridgeTray/ControllerPickerWindow.xaml',
+            'tests/test_apex6_playnite_rate_contract.py'
+          )
+          foreach ($file in $required) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+              throw "Missing integrated feature source: $file"
+            }
+          }
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v3
+
+      - name: Setup Go for integrated VIIPER
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.5'
+          cache: false
+
+      - name: Build integrated VIIPER library and fallback
+        shell: powershell
+        run: |
+          .\scripts\build-viiper-windows.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\scripts\build-libviiper-windows.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build native engine and tests
+        shell: powershell
+        run: |
+          .\scripts\build-windows.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build tray, learning tests and updater
+        shell: powershell
+        run: |
+          .\scripts\build-tray-app.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\scripts\build-updater.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build Playnite extension
+        shell: powershell
+        run: |
+          .\scripts\build-playnite-extension.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run all native CTest regressions
+        shell: powershell
+        run: |
+          ctest --test-dir .\build-win -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Validate Extended and Playnite integration contracts
+        shell: powershell
+        run: |
+          python -m unittest discover -s tests -p 'test_*.py' -q
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/test_pcm_extension_isolation.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/test_pcm_wpf_contract.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/test_pcm_settings_monitor_contract.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/test_apex6_playnite_rate_contract.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Package review-only portable ZIP
+        shell: powershell
+        run: |
+          .\scripts\build-portable.ps1 -SkipBuild
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload review-only Windows packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: apex6-v110-extended-windows-candidate
+          path: |
+            dist/ApexSenseBridge-Portable.zip
+            dist/ApexSenseBridge-Playnite-*.pext
+          retention-days: 14
+          if-no-files-found: error

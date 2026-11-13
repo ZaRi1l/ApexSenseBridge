@@ -71,6 +71,10 @@
                           IsChecked="{Binding Settings.AutoCheckUpdates}"
                           Content="Vérifier automatiquement les mises à jour GitHub au démarrage de Playnite" />
 
+                <CheckBox Margin="0,0,0,6"
+                          IsChecked="{Binding Settings.SendVersionStats}"
+                          Content="Statistiques de version anonymes (version de l'extension et identifiant d'installation aléatoire, sans adresse IP)" />
+
                 <!-- Update Status Message -->
                 <TextBlock Text="{Binding UpdateCheckStatus}" TextWrapping="Wrap" Margin="0,4,0,6"
                            FontStyle="Italic" Opacity="0.85" />
@@ -101,6 +105,9 @@
             <StackPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,4,0,10">
                 <CheckBox IsChecked="{Binding Settings.EnableRumble}"
                           Content="Activer les vibrations des poignées et l'haptique audio" />
+                <CheckBox Margin="0,6,0,0" IsChecked="{Binding Settings.Apex6Rate2kHz}"
+                          Content="APEX 6 Pro : retour haptique à 2 kHz (expérimental)"
+                          ToolTip="Activé par défaut. Décocher pour revenir à 1 kHz. Le moteur vérifie le modèle du contrôleur ; des saccades restent possibles à 2 kHz." />
                 <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                     <TextBlock Text="Force (%)" VerticalAlignment="Center" Margin="0,0,8,0" />
                     <TextBox x:Name="TxtVibrationStrength" Width="60" Text="{Binding Settings.VibrationStrengthPercent, UpdateSourceTrigger=PropertyChanged}"

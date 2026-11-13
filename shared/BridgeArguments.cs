@@ -18,7 +18,8 @@ namespace ApexSenseBridge.Common
             int apex4GyroYawStrengthPercent = 100,
             string apex6PcmArguments = null,
             bool zoneEmulation = true,
-            int lightbarBrightnessPercent = 100)
+            int lightbarBrightnessPercent = 100,
+            bool apex6Rate2k = true)
         {
             var arguments = new List<string>
             {
@@ -42,6 +43,12 @@ namespace ApexSenseBridge.Common
                 arguments.Add("--haptic-threshold");
                 arguments.Add(Math.Max(0, Math.Min(95, hapticThresholdPercent))
                     .ToString(CultureInfo.InvariantCulture));
+            }
+
+            if (!apex6Rate2k)
+            {
+                arguments.Add("--apex6-rate");
+                arguments.Add("1000");
             }
 
             if (syncLightbar)
@@ -93,6 +100,30 @@ namespace ApexSenseBridge.Common
                 syncLightbar, apexProfileSlot, triggerStrengthPercent,
                 vibrationStrengthPercent, apex4GyroStrengthPercent,
                 apex4GyroYawStrengthPercent, null, zoneEmulation, lightbarBrightnessPercent);
+        }
+
+        // Keep upstream v1.1.0 callers that pass the 2 kHz toggle as a
+        // positional twelfth argument. Extended PCM uses an optional string
+        // before the zone/rate arguments in the primary overload.
+        public static string Build(
+            string touchpadProfile,
+            bool enableRumble,
+            int hapticThresholdPercent,
+            bool syncLightbar,
+            int apexProfileSlot,
+            int triggerStrengthPercent,
+            int vibrationStrengthPercent,
+            int apex4GyroStrengthPercent,
+            int apex4GyroYawStrengthPercent,
+            bool zoneEmulation,
+            int lightbarBrightnessPercent,
+            bool apex6Rate2k)
+        {
+            return Build(touchpadProfile, enableRumble, hapticThresholdPercent,
+                syncLightbar, apexProfileSlot, triggerStrengthPercent,
+                vibrationStrengthPercent, apex4GyroStrengthPercent,
+                apex4GyroYawStrengthPercent, null, zoneEmulation,
+                lightbarBrightnessPercent, apex6Rate2k);
         }
 
         private static string NormalizeTouchpadProfile(string profile)

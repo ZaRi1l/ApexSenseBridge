@@ -17,6 +17,7 @@ namespace asb::cli {
 
 inline constexpr std::chrono::seconds kDefaultReattachWindow{600};
 inline constexpr std::chrono::seconds kMaximumReattachWindow{3600};
+inline constexpr bool kApex6ShapingOptionsEnabled = false;
 
 struct ControllerCalibration {
     unsigned triggerStrength = 100;
@@ -55,6 +56,12 @@ struct BridgeCommandOptions {
     unsigned int apex6LinearGainPercent = 100;
     asb::dualsense::Apex6PcmConfig apex6PcmConfig{};
     bool apex6PcmOptionsExplicit = false;
+    unsigned int apex6SampleRateHz = 2000;
+    bool apex6SampleRateExplicit = false;
+    unsigned int apex6GripDuckPercent = 0;
+    bool apex6GripDuckExplicit = false;
+    unsigned int apex6TriggerCeilingPercent = 100;
+    bool apex6TriggerCeilingExplicit = false;
     unsigned int apex4GyroStrengthPercent = 100;
     unsigned int apex4GyroYawStrengthPercent = 100;
     bool hapticThresholdExplicit = false;
