@@ -18,7 +18,8 @@ namespace ApexSenseBridge.Common
             int apex4GyroYawStrengthPercent = 100,
             string apex6PcmArguments = null,
             bool zoneEmulation = true,
-            int lightbarBrightnessPercent = 100)
+            int lightbarBrightnessPercent = 100,
+            bool apex6Rate2k = true)
         {
             var arguments = new List<string>
             {
@@ -42,6 +43,12 @@ namespace ApexSenseBridge.Common
                 arguments.Add("--haptic-threshold");
                 arguments.Add(Math.Max(0, Math.Min(95, hapticThresholdPercent))
                     .ToString(CultureInfo.InvariantCulture));
+            }
+
+            if (!apex6Rate2k)
+            {
+                arguments.Add("--apex6-rate");
+                arguments.Add("1000");
             }
 
             if (syncLightbar)

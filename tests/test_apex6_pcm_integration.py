@@ -85,9 +85,11 @@ class ManualPcmIntegration(unittest.TestCase):
 
     def test_transient_process_errors_do_not_stop_game(self):
         monitor = self.source("ApexSenseBridgeTray/Services/ProcessMonitorService.cs")
-        self.assertIn("Process access", monitor) if False else None
-        self.assertIn("hasExited = false;", monitor)
-        self.assertIn("keeping bridge active", monitor)
+        # v1.1.0 uses a tri-state process liveness check. Unknown must not
+        # become a false exit when a protected game's process cannot be read.
+        self.assertIn("if (state == ProcessLivenessState.Unknown)", monitor)
+        self.assertIn("keeping it attached.", monitor)
+        self.assertIn("continue;", monitor)
 
 
 if __name__ == "__main__":

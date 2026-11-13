@@ -50,6 +50,112 @@ struct Apex6TriggerTraceEntry {
     return "unknown";
 }
 
+struct Apex6ReportSignature {
+    std::uint8_t enableBits1 = 0;
+    std::uint8_t enableBits2 = 0;
+    std::uint8_t enableBits3 = 0;
+    std::uint8_t leftMode = 0;
+    std::uint8_t rightMode = 0;
+    bool rumble = false;
+    std::uint64_t count = 0;
+    std::uint64_t firstMilliseconds = 0;
+    std::uint64_t lastMilliseconds = 0;
+};
+
+enum class Apex6DualPolicy : std::uint8_t {
+    Mix,
+    Priority,
+    Firmware,
+};
+
+inline constexpr Apex6DualPolicy kApex6DefaultDualPolicy = Apex6DualPolicy::Mix;
+
+[[nodiscard]] constexpr std::string_view apex6DualPolicyName(Apex6DualPolicy policy) noexcept {
+    switch (policy) {
+    case Apex6DualPolicy::Mix: return "mix";
+    case Apex6DualPolicy::Priority: return "priority";
+    case Apex6DualPolicy::Firmware: return "firmware";
+    }
+    return "unknown";
+}
+
+[[nodiscard]] constexpr std::optional<Apex6DualPolicy> apex6DualPolicyFromName(
+    std::string_view name) noexcept {
+    if (name == "mix") return Apex6DualPolicy::Mix;
+    if (name == "priority") return Apex6DualPolicy::Priority;
+    if (name == "firmware") return Apex6DualPolicy::Firmware;
+    return std::nullopt;
+}
+
+inline constexpr int kApex6DualMixPeak = 127;
+inline constexpr unsigned kApex6DualMixReleaseBlocks = 63;
+inline constexpr unsigned kApex6DualEntryWindowBlocks = 3;
+inline constexpr unsigned kApex6DualYieldSilentBlocks = 8;
+inline constexpr unsigned kApex6DualOwnerHoldBlocks = 32;
+inline constexpr unsigned kApex6DualPriorityReleaseBlocks = 32;
+inline constexpr unsigned kApex6DualFirmwareReleaseBlocks = 250;
+inline constexpr unsigned kApex6DualFirmwareOffGraceBlocks = 13;
+inline constexpr unsigned kApex6DualFirmwareRefreshBlocks = 25;
+inline constexpr unsigned kApex6DualMaximumSlackWrites = 2;
+inline constexpr double kApex6FirmwareLoopStrengthScale = 150.0;
+inline constexpr double kApex6FirmwareOneShotStrengthScale = 255.0;
+inline constexpr double kApex6FirmwareTrainFullDrive = 150.0;
+
+[[nodiscard]] std::optional<flydigi::apex6::TriggerFirmwareEffect> apex6FirmwareEffectFor(
+    const Apex6TriggerEffect& effect) noexcept;
+
+enum class Apex6DualChange : std::uint8_t {
+    None,
+    Episode,
+    Burst,
+    Return,
+    NewEffect,
+    Yield,
+};
+
+struct Apex6DualInput {
+    std::uint64_t block = 0;
+    bool leftActive = false;
+    bool rightActive = false;
+    bool identical = false;
+    bool leftBurst = false;
+    bool rightBurst = false;
+    bool leftNewEffect = false;
+    bool rightNewEffect = false;
+    bool leftEffectOn = false;
+    bool rightEffectOn = false;
+    bool firmwareCapable = false;
+    Apex6DualPolicy policy = kApex6DefaultDualPolicy;
+};
+
+struct Apex6DualDecision {
+    bool episode = false;
+    bool mix = false;
+    bool firmware = false;
+    flydigi::apex6::TriggerRoute route = flydigi::apex6::TriggerRoute::Mute;
+    flydigi::apex6::TriggerRoute owner = flydigi::apex6::TriggerRoute::Mute;
+    Apex6DualChange change = Apex6DualChange::None;
+};
+
+class Apex6DualArbiter {
+public:
+    [[nodiscard]] Apex6DualDecision next(const Apex6DualInput& input) noexcept;
+    void reset() noexcept { *this = {}; }
+
+private:
+    std::uint64_t leftSeen_ = 0;
+    std::uint64_t rightSeen_ = 0;
+    std::uint64_t leftSince_ = 0;
+    std::uint64_t rightSince_ = 0;
+    std::uint64_t leftOn_ = 0;
+    std::uint64_t rightOn_ = 0;
+    std::uint64_t lastChange_ = 0;
+    flydigi::apex6::TriggerRoute owner_ = flydigi::apex6::TriggerRoute::Mute;
+    flydigi::apex6::TriggerRoute preempted_ = flydigi::apex6::TriggerRoute::Mute;
+    bool episode_ = false;
+    bool firmwareLatched_ = false;
+};
+
 struct Apex6HapticBridgeStats {
     std::uint64_t hidReports = 0;
     std::uint64_t triggerLeftUpdates = 0;
@@ -66,6 +172,10 @@ struct Apex6HapticBridgeStats {
     std::uint8_t lastRightTriggerType = 0;
     std::uint64_t rumbleUpdates = 0;
     std::uint64_t rumbleActiveUpdates = 0;
+    std::uint64_t rumbleLeftPeak = 0;
+    std::uint64_t rumbleRightPeak = 0;
+    std::uint64_t rumbleIgnoredReports = 0;
+    std::uint8_t lastIgnoredRumbleEnableBits = 0;
     std::uint64_t audioEnvelopeReports = 0;
     std::uint64_t audioEnvelopeActive = 0;
     std::uint64_t waveformLeftActiveBlocks = 0;
@@ -108,10 +218,15 @@ struct Apex6HapticBridgeStats {
     std::string pcmMeasurementStatus = "valid";
     std::uint64_t pcmOutputClippedSamples = 0;
     std::uint64_t pcmProcessedSamples = 0;
+    unsigned gripDuckPercent = 0;
+    unsigned triggerCeilingPercent = 100;
+    std::uint64_t gripDuckedBlocks = 0;
+    std::uint64_t triggerLimitedSamples = 0;
     std::uint64_t pcmOutputLeftPeak = 0;
     std::uint64_t pcmOutputRightPeak = 0;
     std::uint64_t gripEnvelopeFrames = 0;
     std::uint64_t gripRumbleFrames = 0;
+    std::uint64_t gripRumbleMaskedFrames = 0;
     std::uint64_t deadlineOverruns = 0;
     std::uint64_t idleFramesSkipped = 0;
     std::uint64_t idleKeepalives = 0;
@@ -122,15 +237,46 @@ struct Apex6HapticBridgeStats {
     std::uint64_t leftTriggerFrames = 0;
     std::uint64_t rightTriggerFrames = 0;
     std::uint64_t bothTriggerFrames = 0;
+    std::uint64_t triggerRetargets = 0;
+    std::uint64_t renderedBlocks = 0;
+    std::uint64_t renderTotalNs = 0;
+    std::uint64_t renderMaximumNs = 0;
+    std::uint64_t dualTriggerBlocks = 0;
+    std::uint64_t dualEpisodes = 0;
+    std::uint64_t dualBurstSwitches = 0;
+    std::uint64_t dualOnsetSwitches = 0;
+    std::uint64_t dualYieldSwitches = 0;
+    std::uint64_t dualMixFrames = 0;
+    std::uint64_t dualMixClippedSamples = 0;
+    std::uint64_t dualReturns = 0;
+    std::uint64_t dualOwnerChanges = 0;
+    std::uint64_t dualFirmwareBlocks = 0;
+    std::uint64_t dualFirmwareEntries = 0;
+    std::uint64_t dualFirmwareExits = 0;
+    std::uint64_t dualFirmwareRefreshes = 0;
+    std::uint64_t dualFirmwareWrites = 0;
+    std::uint64_t dualFirmwareWriteUs = 0;
+    std::uint64_t dualFirmwareDeferred = 0;
+    std::uint64_t dualFirmwareUnmapped = 0;
+    Apex6DualPolicy dualPolicy = kApex6DefaultDualPolicy;
     std::uint64_t hapticEnables = 0;
     std::uint64_t hapticDisables = 0;
+    unsigned sampleRateHz = 1000;
+    std::uint64_t waveform2kBlocks = 0;
+    std::uint64_t waveformUpsampledBlocks = 0;
+    std::uint64_t primeReports = 0;
     std::optional<Apex6TriggerTraceEntry> lastActiveLeft;
     std::optional<Apex6TriggerTraceEntry> lastActiveRight;
+    std::optional<Apex6TriggerTraceEntry> lastVibrationLeft;
+    std::optional<Apex6TriggerTraceEntry> lastVibrationRight;
     std::optional<Apex6TriggerTraceEntry> lastRejectedLeft;
     std::optional<Apex6TriggerTraceEntry> lastRejectedRight;
     std::array<Apex6TriggerTraceEntry, 64> triggerTrace{};
     std::size_t triggerTraceCount = 0;
     std::uint64_t triggerTraceOverwritten = 0;
+    std::array<Apex6ReportSignature, 16> reportSignatures{};
+    std::size_t reportSignatureCount = 0;
+    std::uint64_t reportSignatureOverflow = 0;
 };
 
 class Apex6HapticBridge {
@@ -141,12 +287,19 @@ public:
                                unsigned vibrationStrengthPercent = 100,
                                Apex6PcmConfig pcmConfig = {},
                                std::string_view sessionToken = {},
-                               std::string_view gameKey = {});
+                               std::string_view gameKey = {},
+                               unsigned gripDuckPercent = 0,
+                               unsigned triggerCeilingPercent = 100,
+                               unsigned sampleRateHz = 1000);
+    // Retain the upstream 1.1.0 numeric-gain constructor for callers and tests.
     explicit Apex6HapticBridge(flydigi::Apex5Device& device,
                                haptics::HapticConfig config,
                                bool routeGrips, unsigned triggerStrengthPercent,
                                unsigned vibrationStrengthPercent,
-                               unsigned pcmGainPercent);
+                               unsigned pcmGainPercent,
+                               unsigned gripDuckPercent = 0,
+                               unsigned triggerCeilingPercent = 100,
+                               unsigned sampleRateHz = 1000);
     // Keep the Nov 6 constructor used by native regression tests and CLI clients.
     explicit Apex6HapticBridge(flydigi::Apex5Device& device,
                                haptics::HapticConfig config,
@@ -164,11 +317,14 @@ public:
     void handle(const DualSenseFeedback& feedback);
     void updateTriggerPositions(std::uint8_t left, std::uint8_t right) noexcept;
     void setDiagnosticTrigger(const ForceTriggerCommand& command) noexcept;
+    void setDiagnosticEffect(TriggerSide side, const Apex6TriggerEffect& effect) noexcept;
     void setDiagnosticGrips(std::uint8_t left, std::uint8_t right) noexcept;
     void setPcmAudioFormat(unsigned channels, bool verifiedQuadraphonic) noexcept {
         pcmAudioChannels_.store(channels, std::memory_order_relaxed);
         pcmAudioVerified_.store(verifiedQuadraphonic, std::memory_order_relaxed);
     }
+    void setDualPolicy(Apex6DualPolicy policy) noexcept;
+    [[nodiscard]] Apex6DualPolicy dualPolicy() const noexcept;
 
     [[nodiscard]] bool failed() const noexcept;
     [[nodiscard]] std::string error() const;
@@ -179,18 +335,21 @@ private:
 
     struct WaveformBlock {
         std::uint32_t sequence = 0;
-        std::array<std::int16_t, 8> left{};
-        std::array<std::int16_t, 8> right{};
+        std::array<std::int16_t, 16> left{};
+        std::array<std::int16_t, 16> right{};
         std::uint16_t rawHapticLeftPeak = 0;
         std::uint16_t rawHapticRightPeak = 0;
         bool hasRawMeasurements = false;
         Clock::time_point receivedAt{};
+        std::size_t count = 8;
     };
+
+    using WideBlock = std::array<flydigi::apex6::MotorSubframe, 16>;
 
     static constexpr std::size_t kWaveformQueueCapacity = 3;
 
     void run() noexcept;
-    flydigi::apex6::MotorBlock renderBlock(
+    WideBlock renderBlock(
         flydigi::apex6::TriggerRoute& route,
         bool& triggerEnabled,
         Clock::time_point now) noexcept;
@@ -198,16 +357,31 @@ private:
     void wakeLocked() noexcept;
     bool tryEnterIdle(Clock::time_point now) noexcept;
     void handleTrigger(TriggerSide side, const DualSenseFeedback& feedback);
+    void recordReportSignature(const DualSenseFeedback& feedback);
+    void noteTriggerChangeLocked(TriggerSide side) noexcept;
 
     flydigi::Apex5Device& device_;
     haptics::HapticProcessor hapticProcessor_;
     bool routeGrips_ = true;
+    flydigi::apex6::TriggerRoute renderedSide_ = flydigi::apex6::TriggerRoute::Mute;
     unsigned triggerStrengthPercent_ = 100;
     unsigned vibrationStrengthPercent_ = 100;
     extensions::Apex6PcmExtension pcmExtension_;
     std::atomic_uint pcmAudioChannels_{0};
     std::atomic_bool pcmAudioVerified_{false};
+    unsigned gripDuckPercent_ = 0;
+    unsigned triggerCeilingPercent_ = 100;
+    bool rate2k_ = false;
+    std::size_t blockSize_ = 8;
+    std::int8_t leftTriggerPrevious_ = 0;
+    std::int8_t rightTriggerPrevious_ = 0;
+    std::int16_t leftPcmPrevious_ = 0;
+    std::int16_t rightPcmPrevious_ = 0;
     std::uint64_t triggerSampleOffset_ = 0;
+    std::array<bool, 2> pendingClear_{};
+    std::array<bool, 2> feedbackSeen_{};
+    std::array<Clock::time_point, 2> feedbackSeenAt_{};
+    std::array<Clock::time_point, 2> pendingClearAt_{};
     mutable std::mutex stateMutex_;
     std::condition_variable stopSignal_;
     std::thread worker_;
@@ -230,7 +404,22 @@ private:
     Apex6TriggerRenderState rightTriggerState_{};
     std::uint8_t leftPosition_ = 0;
     std::uint8_t rightPosition_ = 0;
-    bool routeRightNext_ = false;
+    Apex6DualPolicy dualPolicy_ = kApex6DefaultDualPolicy;
+    Apex6DualArbiter dualArbiter_{};
+    std::uint64_t dualBlock_ = 0;
+    Apex6TriggerEffect leftLastEffect_{};
+    Apex6TriggerEffect rightLastEffect_{};
+    std::optional<flydigi::apex6::TriggerFirmwareEffect> leftFirmwareMapping_;
+    std::optional<flydigi::apex6::TriggerFirmwareEffect> rightFirmwareMapping_;
+    std::uint64_t leftEffectGeneration_ = 0;
+    std::uint64_t rightEffectGeneration_ = 0;
+    std::uint64_t leftEffectSeen_ = 0;
+    std::uint64_t rightEffectSeen_ = 0;
+    bool firmwareEngaged_ = false;
+    bool dualFirmwareWanted_ = false;
+    flydigi::apex6::TriggerRoute dualOwner_ = flydigi::apex6::TriggerRoute::Mute;
+    std::optional<flydigi::apex6::TriggerFirmwareEffect> leftFirmwareTarget_;
+    std::optional<flydigi::apex6::TriggerFirmwareEffect> rightFirmwareTarget_;
     double leftGripPhase_ = 0.0;
     double rightGripPhase_ = 0.0;
     Clock::time_point traceStartedAt_ = Clock::now();
@@ -238,10 +427,15 @@ private:
     std::size_t triggerTraceCount_ = 0;
     std::size_t triggerTraceNext_ = 0;
     std::uint64_t triggerTraceOverwritten_ = 0;
+    std::array<Apex6ReportSignature, 16> reportSignatures_{};
+    std::size_t reportSignatureCount_ = 0;
+    std::uint64_t reportSignatureOverflow_ = 0;
     std::optional<Apex6TriggerTraceEntry> lastLeftRequest_;
     std::optional<Apex6TriggerTraceEntry> lastRightRequest_;
     std::optional<Apex6TriggerTraceEntry> lastActiveLeft_;
     std::optional<Apex6TriggerTraceEntry> lastActiveRight_;
+    std::optional<Apex6TriggerTraceEntry> lastVibrationLeft_;
+    std::optional<Apex6TriggerTraceEntry> lastVibrationRight_;
     std::optional<Apex6TriggerTraceEntry> lastRejectedLeft_;
     std::optional<Apex6TriggerTraceEntry> lastRejectedRight_;
 
@@ -263,6 +457,10 @@ private:
     std::atomic_uint8_t lastRightTriggerType_{0};
     std::atomic_uint64_t rumbleUpdates_{0};
     std::atomic_uint64_t rumbleActiveUpdates_{0};
+    std::atomic_uint64_t rumbleLeftPeak_{0};
+    std::atomic_uint64_t rumbleRightPeak_{0};
+    std::atomic_uint64_t rumbleIgnoredReports_{0};
+    std::atomic_uint8_t lastIgnoredRumbleEnableBits_{0};
     std::atomic_uint64_t audioEnvelopeReports_{0};
     std::atomic_uint64_t audioEnvelopeActive_{0};
     std::atomic_uint64_t waveformLeftActiveBlocks_{0};
@@ -296,10 +494,13 @@ private:
     std::atomic_uint64_t waveformActiveRendered_{0};
     std::atomic_uint64_t pcmOutputClippedSamples_{0};
     std::atomic_uint64_t pcmProcessedSamples_{0};
+    std::atomic_uint64_t gripDuckedBlocks_{0};
+    std::atomic_uint64_t triggerLimitedSamples_{0};
     std::atomic_uint64_t pcmOutputLeftPeak_{0};
     std::atomic_uint64_t pcmOutputRightPeak_{0};
     std::atomic_uint64_t gripEnvelopeFrames_{0};
     std::atomic_uint64_t gripRumbleFrames_{0};
+    std::atomic_uint64_t gripRumbleMaskedFrames_{0};
     std::atomic_uint64_t deadlineOverruns_{0};
     std::atomic_uint64_t idleFramesSkipped_{0};
     std::atomic_uint64_t idleKeepalives_{0};
@@ -310,8 +511,32 @@ private:
     std::atomic_uint64_t leftTriggerFrames_{0};
     std::atomic_uint64_t rightTriggerFrames_{0};
     std::atomic_uint64_t bothTriggerFrames_{0};
+    std::atomic_uint64_t triggerRetargets_{0};
+    std::atomic_uint64_t renderedBlocks_{0};
+    std::atomic_uint64_t renderTotalNs_{0};
+    std::atomic_uint64_t renderMaximumNs_{0};
+    std::atomic_uint64_t dualTriggerBlocks_{0};
+    std::atomic_uint64_t dualEpisodes_{0};
+    std::atomic_uint64_t dualBurstSwitches_{0};
+    std::atomic_uint64_t dualOnsetSwitches_{0};
+    std::atomic_uint64_t dualYieldSwitches_{0};
+    std::atomic_uint64_t dualMixFrames_{0};
+    std::atomic_uint64_t dualMixClippedSamples_{0};
+    std::atomic_uint64_t dualReturns_{0};
+    std::atomic_uint64_t dualOwnerChanges_{0};
+    std::atomic_uint64_t dualFirmwareBlocks_{0};
+    std::atomic_uint64_t dualFirmwareEntries_{0};
+    std::atomic_uint64_t dualFirmwareExits_{0};
+    std::atomic_uint64_t dualFirmwareRefreshes_{0};
+    std::atomic_uint64_t dualFirmwareWrites_{0};
+    std::atomic_uint64_t dualFirmwareWriteUs_{0};
+    std::atomic_uint64_t dualFirmwareDeferred_{0};
+    std::atomic_uint64_t dualFirmwareUnmapped_{0};
     std::atomic_uint64_t hapticEnables_{0};
     std::atomic_uint64_t hapticDisables_{0};
+    std::atomic_uint64_t waveform2kBlocks_{0};
+    std::atomic_uint64_t waveformUpsampledBlocks_{0};
+    std::atomic_uint64_t primeReports_{0};
 };
 
 } // namespace asb::dualsense

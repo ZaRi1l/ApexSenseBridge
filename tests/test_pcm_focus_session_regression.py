@@ -63,9 +63,11 @@ class SessionContinuityContracts(unittest.TestCase):
 
     def test_transient_process_query_errors_do_not_end_session(self):
         pruning = method(self.monitor, "private void PruneExitedTrackedProcesses()", "private bool IsTrackedProcess(")
-        self.assertIn("catch (Exception ex)", pruning)
-        self.assertIn("hasExited = false;", pruning)
-        self.assertIn("if (hasExited)", pruning)
+        self.assertIn("var state = livenessSource(processId, expectedCreationTicks, out creationTicks);", pruning)
+        self.assertIn("if (state == ProcessLivenessState.Unknown)", pruning)
+        self.assertIn("keeping it attached.", pruning)
+        self.assertIn("continue;", pruning)
+        self.assertIn("HandleProcessStopped(", pruning)
 
     def test_controller_probe_does_not_steal_active_engine_hid(self):
         det = src("ApexSenseBridgeTray/Services/ControllerDetectionService.cs")
