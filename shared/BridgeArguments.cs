@@ -102,6 +102,30 @@ namespace ApexSenseBridge.Common
                 apex4GyroYawStrengthPercent, null, zoneEmulation, lightbarBrightnessPercent);
         }
 
+        // Keep upstream v1.1.0 callers that pass the 2 kHz toggle as a
+        // positional twelfth argument. Extended PCM uses an optional string
+        // before the zone/rate arguments in the primary overload.
+        public static string Build(
+            string touchpadProfile,
+            bool enableRumble,
+            int hapticThresholdPercent,
+            bool syncLightbar,
+            int apexProfileSlot,
+            int triggerStrengthPercent,
+            int vibrationStrengthPercent,
+            int apex4GyroStrengthPercent,
+            int apex4GyroYawStrengthPercent,
+            bool zoneEmulation,
+            int lightbarBrightnessPercent,
+            bool apex6Rate2k)
+        {
+            return Build(touchpadProfile, enableRumble, hapticThresholdPercent,
+                syncLightbar, apexProfileSlot, triggerStrengthPercent,
+                vibrationStrengthPercent, apex4GyroStrengthPercent,
+                apex4GyroYawStrengthPercent, null, zoneEmulation,
+                lightbarBrightnessPercent, apex6Rate2k);
+        }
+
         private static string NormalizeTouchpadProfile(string profile)
         {
             switch ((profile ?? string.Empty).Trim().ToLowerInvariant())

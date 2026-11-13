@@ -28,6 +28,11 @@ class PlayniteApex6RateContracts(unittest.TestCase):
         self.assertIn('arguments.Add("--apex6-rate");', shared)
         self.assertIn('arguments.Add("1000");', shared)
 
+    def test_upstream_positional_rate_call_still_compiles(self):
+        shared = (ROOT / "shared/BridgeArguments.cs").read_text()
+        self.assertRegex(shared,
+                         r"bool zoneEmulation,\s*int lightbarBrightnessPercent,\s*bool apex6Rate2k\)\s*\{")
+
 
 if __name__ == "__main__":
     unittest.main()
